@@ -6,7 +6,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
 
 ## Tasks
 
-- [-] 1. Set up project structure and dependencies
+- [x] 1. Set up project structure and dependencies
   - Create FastAPI backend directory structure
   - Set up React/Next.js frontend directory structure  
   - Configure package management (requirements.txt, package.json)
