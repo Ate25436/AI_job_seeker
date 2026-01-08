@@ -11,8 +11,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_collection("markdown_rag")
 
-# ---------- 1) ユーザ質問 ----------
-question = "カードゲームのAIを開発した経験から学んだことについて教えてください"
 
 
 def generate_answer(question: str):
@@ -67,4 +65,5 @@ def generate_answer(question: str):
     print(answer)
 
 if __name__ == "__main__":
+    question = input("質問を入力してください．")
     generate_answer(question)
