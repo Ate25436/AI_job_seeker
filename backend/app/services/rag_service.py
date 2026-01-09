@@ -59,7 +59,7 @@ class RAGService:
             logger.error(f"Failed to initialize RAG service: {e}")
             raise
 
-    async def generate_answer(self, question: str) -> Dict[str, any]:
+    async def generate_answer(self, question: str, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, any]:
         """
         Generate an answer for the given question using RAG.
         
@@ -69,6 +69,7 @@ class RAGService:
         Returns:
             Dictionary containing answer, sources, and metadata
         """
+        print(history)
         if not self.openai_client or not self.collection:
             raise RuntimeError("RAG service not initialized. Call initialize() first.")
         
@@ -107,6 +108,23 @@ class RAGService:
                 context += f"\n[FILE: {file_name}] [SECTION: {heading_path}]\n{doc}\n"
                 sources.append(f"{file_name} - {heading_path}")
             
+            # Build conversation history
+            history_lines = []
+            if history:
+                for item in history:
+                    if isinstance(item, dict):
+                        role = item.get("role")
+                        content = item.get("content")
+                    else:
+                        role = getattr(item, "role", None)
+                        content = getattr(item, "content", None)
+
+                    if role in {"user", "assistant"} and content:
+                        prefix = "User" if role == "user" else "Assistant"
+                        history_lines.append(f"{prefix}: {content}")
+
+            history_block = "".join(history_lines) if history_lines else "(なし)"
+
             # Generate answer using OpenAI
             prompt = f"""
 あなたは与えられたコンテキスト（経験）に基づいて質問に回答する就活生です。
@@ -115,6 +133,10 @@ class RAGService:
 - 以下の「コンテキスト」に含まれる情報のみを根拠として回答する
 - コンテキストに答えがない場合は「わかりません」と答える
 - 想像や推測で補完しない
+- 会話の文脈がある場合は、履歴を踏まえて一貫した回答を返す
+
+# 会話履歴
+{history_block}
 
 # コンテキスト
 {context}

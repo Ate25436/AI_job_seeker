@@ -160,7 +160,7 @@ async def ask_question(request: QuestionRequest):
         logger.info(f"Processing question: {question[:100]}...")
         
         # Generate answer using RAG service
-        result = await rag_service.generate_answer(question)
+        result = await rag_service.generate_answer(question, history=request.history)
         
         # Create response
         response = AnswerResponse(

@@ -71,14 +71,14 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
 - [x] 4. Checkpoint - Ensure backend tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement React frontend
-  - [ ] 5.1 Create Next.js application structure
+- [x] 5. Implement React frontend
+  - [x] 5.1 Create Next.js application structure
     - Set up Next.js project with TypeScript
     - Configure API client for backend communication
     - Set up basic routing and layout components
     - _Requirements: 1.1, 1.2_
 
-  - [ ] 5.2 Implement question input form component
+  - [x] 5.2 Implement question input form component
     - Create question input form with validation
     - Add submit functionality with API integration
     - Implement loading states and error handling
@@ -90,7 +90,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 4: Error message display**
     - **Validates: Requirements 1.2, 1.3, 1.5**
 
-  - [ ] 5.4 Implement conversation history component
+  - [x] 5.4 Implement conversation history component
     - Create conversation display component
     - Add session-based history management
     - Implement conversation persistence in browser storage
@@ -100,7 +100,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 3: Conversation history maintenance**
     - **Validates: Requirements 1.4**
 
-  - [ ] 5.6 Add static asset optimization
+  - [x] 5.6 Add static asset optimization
     - Configure Next.js for static asset caching
     - Implement image optimization and lazy loading
     - Set up build optimization for production
