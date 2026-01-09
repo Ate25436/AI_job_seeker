@@ -13,8 +13,8 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
   - Set up development environment configuration
   - _Requirements: 2.1, 4.1, 4.2_
 
-- [ ] 2. Refactor existing RAG system into API service
-  - [ ] 2.1 Create RAGService class from existing code
+- [x] 2. Refactor existing RAG system into API service
+  - [x] 2.1 Create RAGService class from existing code
     - Extract generate_answer function into RAGService class
     - Add async support and error handling
     - Implement health check functionality
@@ -24,7 +24,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 5: API question response**
     - **Validates: Requirements 2.1**
 
-  - [ ] 2.3 Create VectorDBManager class
+  - [x] 2.3 Create VectorDBManager class
     - Refactor save_vector.py and chunk_md.py into class-based structure
     - Add initialization and re-indexing methods
     - Implement concurrent access safety
@@ -36,8 +36,8 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 11: Concurrent read safety**
     - **Validates: Requirements 3.3, 3.4, 3.5**
 
-- [ ] 3. Implement FastAPI server
-  - [ ] 3.1 Create FastAPI application with basic structure
+- [x] 3. Implement FastAPI server
+  - [x] 3.1 Create FastAPI application with basic structure
     - Set up FastAPI app with CORS configuration
     - Implement request/response models using Pydantic
     - Add basic error handling middleware
@@ -47,7 +47,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 7: CORS headers**
     - **Validates: Requirements 2.4**
 
-  - [ ] 3.3 Implement /api/ask endpoint
+  - [x] 3.3 Implement /api/ask endpoint
     - Create question processing endpoint
     - Integrate with RAGService
     - Add input validation and error responses
@@ -58,7 +58,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 8: Request logging**
     - **Validates: Requirements 2.2, 2.5**
 
-  - [ ] 3.5 Add health check and monitoring endpoints
+  - [x] 3.5 Add health check and monitoring endpoints
     - Implement /api/health endpoint
     - Add request/response logging
     - Create error logging with detailed information
@@ -68,7 +68,7 @@ AI就活生アプリケーションを既存のPythonベースのRAGシステム
     - **Property 17: Error logging detail**
     - **Validates: Requirements 7.2**
 
-- [ ] 4. Checkpoint - Ensure backend tests pass
+- [x] 4. Checkpoint - Ensure backend tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Implement React frontend
