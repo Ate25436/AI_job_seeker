@@ -4,14 +4,12 @@ from typing import Dict, List, Optional
 from datetime import datetime
 import chromadb
 from openai import OpenAI
-import os
-from dotenv import load_dotenv
+
+from ..security import sanitize_message
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 
 class RAGService:
@@ -20,7 +18,12 @@ class RAGService:
     using ChromaDB for vector search and OpenAI for answer generation.
     """
     
-    def __init__(self, chroma_db_path: str = "./chroma_db", collection_name: str = "markdown_rag"):
+    def __init__(
+        self,
+        chroma_db_path: str = "./chroma_db",
+        collection_name: str = "markdown_rag",
+        openai_api_key: str | None = None,
+    ):
         """
         Initialize the RAG service.
         
@@ -30,6 +33,7 @@ class RAGService:
         """
         self.chroma_db_path = chroma_db_path
         self.collection_name = collection_name
+        self.openai_api_key = openai_api_key
         self.openai_client = None
         self.chroma_client = None
         self.collection = None
@@ -38,11 +42,10 @@ class RAGService:
         """Initialize the RAG service components."""
         try:
             # Initialize OpenAI client
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
+            if not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required")
-            
-            self.openai_client = OpenAI(api_key=api_key)
+
+            self.openai_client = OpenAI(api_key=self.openai_api_key)
             
             # Initialize ChromaDB client
             self.chroma_client = chromadb.PersistentClient(path=self.chroma_db_path)
@@ -52,11 +55,18 @@ class RAGService:
                 self.collection = self.chroma_client.get_or_create_collection(self.collection_name)
                 logger.info(f"Successfully connected to collection: {self.collection_name}")
             except Exception as e:
-                logger.error(f"Failed to get or create collection {self.collection_name}: {e}")
+                logger.error(
+                    "Failed to get or create collection %s: %s",
+                    self.collection_name,
+                    sanitize_message(str(e), secrets=[self.openai_api_key]),
+                )
                 raise
                 
         except Exception as e:
-            logger.error(f"Failed to initialize RAG service: {e}")
+            logger.error(
+                "Failed to initialize RAG service: %s",
+                sanitize_message(str(e), secrets=[self.openai_api_key]),
+            )
             raise
 
     async def generate_answer(self, question: str, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, any]:
@@ -69,7 +79,6 @@ class RAGService:
         Returns:
             Dictionary containing answer, sources, and metadata
         """
-        print(history)
         if not self.openai_client or not self.collection:
             raise RuntimeError("RAG service not initialized. Call initialize() first.")
         
@@ -79,6 +88,23 @@ class RAGService:
         try:
             start_time = datetime.now()
             
+            # Build conversation history
+            history_lines = []
+            if history:
+                for item in history:
+                    if isinstance(item, dict):
+                        role = item.get("role")
+                        content = item.get("content")
+                    else:
+                        role = getattr(item, "role", None)
+                        content = getattr(item, "content", None)
+
+                    if role in {"user", "assistant"} and content:
+                        prefix = "User" if role == "user" else "Assistant"
+                        history_lines.append(f"{prefix}: {content}")
+
+            history_block = "".join(history_lines) if history_lines else "(なし)"
+
             # Generate embedding for the question
             q_emb_response = await asyncio.to_thread(
                 self.openai_client.embeddings.create,
@@ -131,22 +157,23 @@ class RAGService:
 
 # 制約
 - 以下の「コンテキスト」に含まれる情報のみを根拠として回答する
-- コンテキストに答えがない場合は「わかりません」と答える
-- 想像や推測で補完しない
-- 会話の文脈がある場合は、履歴を踏まえて一貫した回答を返す
-
-# 会話履歴
-{history_block}
-
-# コンテキスト
-{context}
+- コンテキストに答えがない場合は「申し訳ありません．事前知識に含まれていないのでお答えできません．」と答える
+- 質問に「その」，「それ」，「そこ」などの指示語が含まれる場合は，必ず会話履歴を参照して指示語の指す内容を特定する
 
 # 質問
 {question}
 
+# コンテキスト
+
+## 会話履歴
+{history_block}
+
+## ドキュメント情報
+{context}
+
+
 # 回答:
 """
-
             response = await asyncio.to_thread(
                 self.openai_client.chat.completions.create,
                 model="gpt-4o-mini",
@@ -166,7 +193,10 @@ class RAGService:
             }
             
         except Exception as e:
-            logger.error(f"Error generating answer: {e}")
+            logger.error(
+                "Error generating answer: %s",
+                sanitize_message(str(e), secrets=[self.openai_api_key]),
+            )
             raise
 
     async def health_check(self) -> Dict[str, str]:
@@ -193,7 +223,10 @@ class RAGService:
                 health_status["database_status"] = "not_initialized"
                 health_status["status"] = "unhealthy"
         except Exception as e:
-            logger.error(f"Database health check failed: {e}")
+            logger.error(
+                "Database health check failed: %s",
+                sanitize_message(str(e), secrets=[self.openai_api_key]),
+            )
             health_status["database_status"] = "unhealthy"
             health_status["status"] = "unhealthy"
         
@@ -211,7 +244,10 @@ class RAGService:
                 health_status["openai_status"] = "not_initialized"
                 health_status["status"] = "unhealthy"
         except Exception as e:
-            logger.error(f"OpenAI health check failed: {e}")
+            logger.error(
+                "OpenAI health check failed: %s",
+                sanitize_message(str(e), secrets=[self.openai_api_key]),
+            )
             health_status["openai_status"] = "unhealthy"
             health_status["status"] = "unhealthy"
         

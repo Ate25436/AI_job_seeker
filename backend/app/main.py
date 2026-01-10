@@ -9,16 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from .config import get_settings
+from .config import get_settings, settings_for_log
 from .models import QuestionRequest, AnswerResponse, HealthResponse, ErrorResponse
 from .services.rag_service import RAGService
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from .security import sanitize_message
 
 # Global RAG service instance
 rag_service = None
+settings = get_settings()
+
+# Configure logging
+logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,14 +29,17 @@ async def lifespan(app: FastAPI):
     
     # Startup
     logger.info("Starting AI Job Seeker API...")
-    settings = get_settings()
+    logger.info("Loaded settings: %s", settings_for_log(settings))
     
     try:
-        rag_service = RAGService(chroma_db_path=settings.chroma_db_path)
+        rag_service = RAGService(
+            chroma_db_path=settings.chroma_db_path,
+            openai_api_key=settings.openai_api_key.get_secret_value(),
+        )
         await rag_service.initialize()
         logger.info("RAG service initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize RAG service: {e}")
+        logger.error("Failed to initialize RAG service: %s", sanitize_message(str(e)))
         raise
     
     yield
@@ -54,7 +59,7 @@ app = FastAPI(
 # CORS configuration for web browser access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,12 +69,17 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle request validation errors with detailed error messages."""
-    logger.warning(f"Validation error for {request.url}: {exc}")
+    logger.warning(
+        "Validation error for %s %s: %s",
+        request.method,
+        request.url.path,
+        sanitize_message(str(exc)),
+    )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
             error="validation_error",
-            message=f"Invalid request data: {str(exc)}",
+            message="Invalid request data.",
             timestamp=datetime.now()
         ).model_dump(mode='json')
     )
@@ -78,7 +88,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions with consistent error format."""
-    logger.error(f"HTTP error {exc.status_code} for {request.url}: {exc.detail}")
+    logger.error(
+        "HTTP error %s for %s %s: %s",
+        exc.status_code,
+        request.method,
+        request.url.path,
+        sanitize_message(str(exc.detail)),
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
@@ -92,7 +108,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors with generic error message."""
-    logger.error(f"Unexpected error for {request.url}: {exc}", exc_info=True)
+    logger.error(
+        "Unexpected error for %s %s: %s",
+        request.method,
+        request.url.path,
+        sanitize_message(str(exc)),
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse(
@@ -109,14 +131,14 @@ async def log_requests(request: Request, call_next):
     start_time = datetime.now()
     
     # Log request
-    logger.info(f"Request: {request.method} {request.url}")
+    logger.info("Request: %s %s", request.method, request.url.path)
     
     # Process request
     response = await call_next(request)
     
     # Log response
     process_time = (datetime.now() - start_time).total_seconds()
-    logger.info(f"Response: {response.status_code} - {process_time:.3f}s")
+    logger.info("Response: %s - %.3fs", response.status_code, process_time)
     
     return response
 
@@ -157,7 +179,10 @@ async def ask_question(request: QuestionRequest):
                 detail="Question cannot be empty or contain only whitespace."
             )
         
-        logger.info(f"Processing question: {question[:100]}...")
+        if settings.environment == "development":
+            logger.info("Processing question: %s...", question[:100])
+        else:
+            logger.info("Processing question with length: %s", len(question))
         
         # Generate answer using RAG service
         result = await rag_service.generate_answer(question, history=request.history)
@@ -170,23 +195,27 @@ async def ask_question(request: QuestionRequest):
             processing_time_ms=result["processing_time_ms"]
         )
         
-        logger.info(f"Question processed successfully in {result['processing_time_ms']}ms")
+        logger.info("Question processed successfully in %sms", result["processing_time_ms"])
         return response
         
     except ValueError as e:
-        logger.warning(f"Invalid question input: {e}")
+        logger.warning("Invalid question input: %s", sanitize_message(str(e)))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except RuntimeError as e:
-        logger.error(f"RAG service runtime error: {e}")
+        logger.error("RAG service runtime error: %s", sanitize_message(str(e)))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="RAG service is temporarily unavailable. Please try again later."
         )
     except Exception as e:
-        logger.error(f"Unexpected error processing question: {e}", exc_info=True)
+        logger.error(
+            "Unexpected error processing question: %s",
+            sanitize_message(str(e)),
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while processing your question. Please try again."
@@ -222,11 +251,11 @@ async def health_check():
             openai_status=health_result["openai_status"]
         )
         
-        logger.info(f"Health check completed: {response.status}")
+        logger.info("Health check completed: %s", response.status)
         return response
         
     except Exception as e:
-        logger.error(f"Health check failed: {e}", exc_info=True)
+        logger.error("Health check failed: %s", sanitize_message(str(e)), exc_info=True)
         return HealthResponse(
             status="unhealthy",
             timestamp=datetime.now(),
