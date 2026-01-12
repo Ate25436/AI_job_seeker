@@ -98,6 +98,13 @@ Backend (Railway):
   - `CORS_ALLOW_ORIGINS=https://your-frontend.vercel.app`
   - `AUTO_INIT_VECTOR_DB=true` (optional; if you mount/load sources)
   - `INFO_SOURCE_PATH` (optional; where markdown sources live)
+  - `REINDEX_TOKEN` (required if you want to use the re-index endpoint)
+
+Re-index endpoint:
+```bash
+curl -X POST https://your-backend.up.railway.app/api/admin/reindex \
+  -H "X-Admin-Token: your-token"
+```
 
 ## Vector Database Utilities
 

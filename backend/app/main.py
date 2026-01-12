@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel
 
 from .config import get_settings, settings_for_log
 from .models import QuestionRequest, AnswerResponse, HealthResponse, ErrorResponse
@@ -292,3 +293,51 @@ async def health_check():
             database_status="error",
             openai_status="error"
         )
+
+
+@app.post("/api/admin/reindex", response_model=ReindexResponse)
+async def reindex_vector_db(request: Request):
+    """Re-index vector database from markdown sources."""
+    token = request.headers.get("X-Admin-Token")
+    if not settings.reindex_token:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Reindexing is not configured."
+        )
+    if not token or token != settings.reindex_token.get_secret_value():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin token."
+        )
+
+    info_source_dir = Path(settings.info_source_path)
+    if not info_source_dir.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Info source path not found: {settings.info_source_path}"
+        )
+
+    try:
+        vector_manager = VectorDBManager(
+            db_path=settings.chroma_db_path,
+            collection_name="markdown_rag",
+            openai_api_key=settings.openai_api_key.get_secret_value(),
+        )
+        await vector_manager.initialize()
+        result = await vector_manager.re_index(str(info_source_dir))
+        await vector_manager.close()
+        return ReindexResponse(
+            status=result["status"],
+            message=result["message"],
+            chunks_processed=result["chunks_processed"],
+        )
+    except Exception as e:
+        logger.error("Reindex failed: %s", sanitize_message(str(e)), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to re-index vector database."
+        )
+class ReindexResponse(BaseModel):
+    status: str
+    message: str
+    chunks_processed: int

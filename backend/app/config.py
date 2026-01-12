@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     retrieval_cache_max_size: int = 128
     auto_init_vector_db: bool = False
     info_source_path: str = "./information_source"
+    reindex_token: SecretStr | None = None
 
     @field_validator("log_level")
     @classmethod
@@ -91,6 +92,7 @@ def settings_for_log(settings: Settings) -> dict:
         "retrieval_cache_max_size": settings.retrieval_cache_max_size,
         "auto_init_vector_db": settings.auto_init_vector_db,
         "info_source_path": settings.info_source_path,
+        "reindex_token": mask_secret(settings.reindex_token) if settings.reindex_token else "",
         "openai_api_key": mask_secret(settings.openai_api_key),
     }
 
