@@ -92,7 +92,7 @@ Backend (Render):
 - Environment variables:
   - `OPENAI_API_KEY`
   - `ENVIRONMENT=production`
-  - `CHROMA_DB_PATH=/app/chroma_db`
+  - `CHROMA_DB_PATH=/var/data/chroma_db`
   - `INFO_SOURCE_PATH=/opt/render/project/src/information_source`
   - `AUTO_INIT_VECTOR_DB=true` (optional)
   - `CORS_ALLOW_ORIGINS=https://your-frontend.onrender.com`
