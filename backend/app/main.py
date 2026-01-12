@@ -86,6 +86,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Response model for re-indexing endpoint
+class ReindexResponse(BaseModel):
+    status: str
+    message: str
+    chunks_processed: int
+
 # CORS configuration for web browser access
 app.add_middleware(
     CORSMiddleware,
@@ -337,7 +343,3 @@ async def reindex_vector_db(request: Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to re-index vector database."
         )
-class ReindexResponse(BaseModel):
-    status: str
-    message: str
-    chunks_processed: int
