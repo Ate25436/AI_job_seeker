@@ -2,6 +2,7 @@
 """
 Initialize the vector database with markdown content from information_source directory
 """
+import argparse
 import asyncio
 import os
 import sys
@@ -15,10 +16,16 @@ from app.services.vector_db_manager import VectorDBManager
 
 async def main():
     """Initialize the vector database with markdown content."""
+    parser = argparse.ArgumentParser(description="Initialize the vector database from markdown files.")
+    parser.add_argument("--source", default=os.getenv("INFO_SOURCE_PATH", "../information_source"))
+    parser.add_argument("--db-path", default=os.getenv("CHROMA_DB_PATH", "./chroma_db"))
+    parser.add_argument("--collection", default="markdown_rag")
+    args = parser.parse_args()
+
     print("Initializing vector database...")
     
     # Check if information_source directory exists
-    info_source_dir = Path("../information_source")
+    info_source_dir = Path(args.source)
     if not info_source_dir.exists():
         print(f"Error: {info_source_dir} directory not found!")
         print("Please make sure the information_source directory exists in the project root.")
@@ -26,7 +33,11 @@ async def main():
     
     try:
         # Initialize the VectorDBManager
-        db_manager = VectorDBManager(db_path="./chroma_db")
+        db_manager = VectorDBManager(
+            db_path=args.db_path,
+            collection_name=args.collection,
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        )
         await db_manager.initialize()
         
         # Initialize from markdown files

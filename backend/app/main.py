@@ -1,9 +1,11 @@
 """
 FastAPI main application entry point
 """
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from .config import get_settings, settings_for_log
 from .models import QuestionRequest, AnswerResponse, HealthResponse, ErrorResponse
 from .services.rag_service import RAGService
+from .services.vector_db_manager import VectorDBManager
 from .security import sanitize_message
 
 # Global RAG service instance
@@ -35,9 +38,35 @@ async def lifespan(app: FastAPI):
         rag_service = RAGService(
             chroma_db_path=settings.chroma_db_path,
             openai_api_key=settings.openai_api_key.get_secret_value(),
+            embedding_cache_ttl_seconds=settings.embedding_cache_ttl_seconds,
+            embedding_cache_max_size=settings.embedding_cache_max_size,
+            retrieval_cache_ttl_seconds=settings.retrieval_cache_ttl_seconds,
+            retrieval_cache_max_size=settings.retrieval_cache_max_size,
         )
         await rag_service.initialize()
         logger.info("RAG service initialized successfully")
+
+        if settings.auto_init_vector_db:
+            info_source_dir = Path(settings.info_source_path)
+            if not info_source_dir.exists():
+                logger.warning(
+                    "Auto init skipped: info source path not found: %s",
+                    settings.info_source_path,
+                )
+            else:
+                count = await asyncio.to_thread(rag_service.collection.count)
+                if count == 0:
+                    logger.info("Auto init: seeding vector database from %s", info_source_dir)
+                    vector_manager = VectorDBManager(
+                        db_path=settings.chroma_db_path,
+                        collection_name="markdown_rag",
+                        openai_api_key=settings.openai_api_key.get_secret_value(),
+                    )
+                    await vector_manager.initialize()
+                    await vector_manager.initialize_from_markdown(str(info_source_dir))
+                    await vector_manager.close()
+                else:
+                    logger.info("Auto init skipped: collection already has %s documents", count)
     except Exception as e:
         logger.error("Failed to initialize RAG service: %s", sanitize_message(str(e)))
         raise
@@ -59,7 +88,7 @@ app = FastAPI(
 # CORS configuration for web browser access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins,
+    allow_origins=settings.cors_allow_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,6 +168,7 @@ async def log_requests(request: Request, call_next):
     # Log response
     process_time = (datetime.now() - start_time).total_seconds()
     logger.info("Response: %s - %.3fs", response.status_code, process_time)
+    response.headers["X-Response-Time-ms"] = str(int(process_time * 1000))
     
     return response
 

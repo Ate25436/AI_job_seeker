@@ -6,6 +6,7 @@ import chromadb
 from openai import OpenAI
 
 from ..security import sanitize_message
+from .cache import SimpleTTLCache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +24,10 @@ class RAGService:
         chroma_db_path: str = "./chroma_db",
         collection_name: str = "markdown_rag",
         openai_api_key: str | None = None,
+        embedding_cache_ttl_seconds: int = 300,
+        embedding_cache_max_size: int = 256,
+        retrieval_cache_ttl_seconds: int = 300,
+        retrieval_cache_max_size: int = 128,
     ):
         """
         Initialize the RAG service.
@@ -37,6 +42,16 @@ class RAGService:
         self.openai_client = None
         self.chroma_client = None
         self.collection = None
+        self.embedding_cache = (
+            SimpleTTLCache[str, list[float]](embedding_cache_max_size, embedding_cache_ttl_seconds)
+            if embedding_cache_max_size > 0 and embedding_cache_ttl_seconds > 0
+            else None
+        )
+        self.retrieval_cache = (
+            SimpleTTLCache[str, tuple[list[str], list[dict]]](retrieval_cache_max_size, retrieval_cache_ttl_seconds)
+            if retrieval_cache_max_size > 0 and retrieval_cache_ttl_seconds > 0
+            else None
+        )
         
     async def initialize(self) -> None:
         """Initialize the RAG service components."""
@@ -87,42 +102,39 @@ class RAGService:
         
         try:
             start_time = datetime.now()
-            
-            # Build conversation history
-            history_lines = []
-            if history:
-                for item in history:
-                    if isinstance(item, dict):
-                        role = item.get("role")
-                        content = item.get("content")
-                    else:
-                        role = getattr(item, "role", None)
-                        content = getattr(item, "content", None)
 
-                    if role in {"user", "assistant"} and content:
-                        prefix = "User" if role == "user" else "Assistant"
-                        history_lines.append(f"{prefix}: {content}")
+            normalized_question = question.strip()
+            history_block = self._build_history_block(history)
 
-            history_block = "".join(history_lines) if history_lines else "(なし)"
+            q_emb = None
+            if self.embedding_cache:
+                q_emb = self.embedding_cache.get(normalized_question)
+            if q_emb is None:
+                q_emb_response = await asyncio.to_thread(
+                    self.openai_client.embeddings.create,
+                    model="text-embedding-3-small",
+                    input=normalized_question
+                )
+                q_emb = q_emb_response.data[0].embedding
+                if self.embedding_cache:
+                    self.embedding_cache.set(normalized_question, q_emb)
 
-            # Generate embedding for the question
-            q_emb_response = await asyncio.to_thread(
-                self.openai_client.embeddings.create,
-                model="text-embedding-3-small",
-                input=question.strip()
-            )
-            q_emb = q_emb_response.data[0].embedding
-            
-            # Search for relevant documents
-            results = await asyncio.to_thread(
-                self.collection.query,
-                query_embeddings=[q_emb],
-                n_results=3
-            )
-            
-            retrieved_docs = results["documents"][0]
-            retrieved_meta = results["metadatas"][0]
-            
+            retrieval_result = None
+            if self.retrieval_cache:
+                retrieval_result = self.retrieval_cache.get(normalized_question)
+            if retrieval_result is None:
+                results = await asyncio.to_thread(
+                    self.collection.query,
+                    query_embeddings=[q_emb],
+                    n_results=3
+                )
+                retrieved_docs = list(results["documents"][0])
+                retrieved_meta = list(results["metadatas"][0])
+                if self.retrieval_cache:
+                    self.retrieval_cache.set(normalized_question, (retrieved_docs, retrieved_meta))
+            else:
+                retrieved_docs, retrieved_meta = retrieval_result
+
             # Build context from retrieved documents
             context = ""
             sources = []
@@ -134,26 +146,9 @@ class RAGService:
                 context += f"\n[FILE: {file_name}] [SECTION: {heading_path}]\n{doc}\n"
                 sources.append(f"{file_name} - {heading_path}")
             
-            # Build conversation history
-            history_lines = []
-            if history:
-                for item in history:
-                    if isinstance(item, dict):
-                        role = item.get("role")
-                        content = item.get("content")
-                    else:
-                        role = getattr(item, "role", None)
-                        content = getattr(item, "content", None)
-
-                    if role in {"user", "assistant"} and content:
-                        prefix = "User" if role == "user" else "Assistant"
-                        history_lines.append(f"{prefix}: {content}")
-
-            history_block = "".join(history_lines) if history_lines else "(なし)"
-
             # Generate answer using OpenAI
             prompt = f"""
-あなたは与えられたコンテキスト（経験）に基づいて質問に回答する就活生です。
+あなたは与えられたコンテキストに基づいて質問に回答する就活生です。
 
 # 制約
 - 以下の「コンテキスト」に含まれる情報のみを根拠として回答する
@@ -174,6 +169,7 @@ class RAGService:
 
 # 回答:
 """
+            print("Prompt for OpenAI:", prompt)  # Debugging line
             response = await asyncio.to_thread(
                 self.openai_client.chat.completions.create,
                 model="gpt-4o-mini",
@@ -198,6 +194,24 @@ class RAGService:
                 sanitize_message(str(e), secrets=[self.openai_api_key]),
             )
             raise
+
+    @staticmethod
+    def _build_history_block(history: Optional[List[Dict[str, str]]]) -> str:
+        history_lines = []
+        if history:
+            for item in history:
+                if isinstance(item, dict):
+                    role = item.get("role")
+                    content = item.get("content")
+                else:
+                    role = getattr(item, "role", None)
+                    content = getattr(item, "content", None)
+
+                if role in {"user", "assistant"} and content:
+                    prefix = "User" if role == "user" else "Assistant"
+                    history_lines.append(f"{prefix}: {content}")
+
+        return "".join(history_lines) if history_lines else "(なし)"
 
     async def health_check(self) -> Dict[str, str]:
         """

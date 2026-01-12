@@ -73,6 +73,50 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
+## Production-like Docker Setup
+
+```bash
+docker-compose up --build
+```
+
+This uses `backend/Dockerfile` and `frontend/Dockerfile` and mounts `chroma_db/` and `information_source/`.
+
+## Cloud Deployment (Vercel + Railway)
+
+Frontend (Vercel):
+- Root directory: `frontend`
+- Environment variables:
+  - `NEXT_PUBLIC_API_BASE_URL` (e.g. `https://your-backend.up.railway.app`)
+
+Backend (Railway):
+- Root directory: `backend`
+- Start command is configured in `backend/railway.json`
+- Environment variables:
+  - `OPENAI_API_KEY`
+  - `CHROMA_DB_PATH` (e.g. `/app/chroma_db`)
+  - `ENVIRONMENT=production`
+  - `CORS_ALLOW_ORIGINS=https://your-frontend.vercel.app`
+  - `AUTO_INIT_VECTOR_DB=true` (optional; if you mount/load sources)
+  - `INFO_SOURCE_PATH` (optional; where markdown sources live)
+
+## Vector Database Utilities
+
+Initialize from markdown sources:
+```bash
+cd backend
+python initialize_db.py --source ../information_source --db-path ./chroma_db
+```
+
+Backup the database:
+```bash
+python scripts/backup_vector_db.py --db-path ./chroma_db --output-dir backups
+```
+
+Restore the database:
+```bash
+python scripts/restore_vector_db.py backups/chroma_db_backup_YYYYMMDD_HHMMSS.zip --db-path ./chroma_db --force
+```
+
 ## Next Steps
 
 This setup provides the foundation for:

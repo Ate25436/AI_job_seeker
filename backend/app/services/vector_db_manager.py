@@ -7,15 +7,11 @@ import re
 import chromadb
 from openai import OpenAI
 import os
-from dotenv import load_dotenv
 from threading import Lock
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-load_dotenv()
-
 
 class VectorDBManager:
     """
@@ -23,7 +19,12 @@ class VectorDBManager:
     re-indexing, and concurrent access safety.
     """
     
-    def __init__(self, db_path: str = "./chroma_db", collection_name: str = "markdown_rag"):
+    def __init__(
+        self,
+        db_path: str = "./chroma_db",
+        collection_name: str = "markdown_rag",
+        openai_api_key: str | None = None,
+    ):
         """
         Initialize the VectorDBManager.
         
@@ -37,12 +38,13 @@ class VectorDBManager:
         self.collection = None
         self.openai_client = None
         self._lock = Lock()  # For concurrent access safety
+        self.openai_api_key = openai_api_key
         
     async def initialize(self) -> None:
         """Initialize the vector database manager."""
         try:
             # Initialize OpenAI client for embeddings
-            api_key = os.getenv("OPENAI_API_KEY")
+            api_key = self.openai_api_key or os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable is required")
             
