@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: ai-job-seeker-backend
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: CHROMA_DB_PATH
+        value: /app/chroma_db
+      - key: INFO_SOURCE_PATH
+        value: /opt/render/project/src/information_source
+      - key: AUTO_INIT_VECTOR_DB
+        value: true
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: REINDEX_TOKEN
+        sync: false
+    disk:
+      name: chroma-db
+      mountPath: /app/chroma_db
+      sizeGB: 1
+
+  - type: web
+    name: ai-job-seeker-frontend
+    env: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false

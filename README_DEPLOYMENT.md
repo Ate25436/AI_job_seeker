@@ -81,28 +81,32 @@ docker-compose up --build
 
 This uses `backend/Dockerfile` and `frontend/Dockerfile` and mounts `chroma_db/` and `information_source/`.
 
-## Cloud Deployment (Vercel + Railway)
+## Cloud Deployment (Render)
 
-Frontend (Vercel):
-- Root directory: `frontend`
-- Environment variables:
-  - `NEXT_PUBLIC_API_BASE_URL` (e.g. `https://your-backend.up.railway.app`)
+Render uses `render.yaml` at the repo root to provision both services.
 
-Backend (Railway):
+Backend (Render):
+- Service name: `ai-job-seeker-backend`
 - Root directory: `backend`
-- Start command is configured in `backend/railway.json`
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Environment variables:
   - `OPENAI_API_KEY`
-  - `CHROMA_DB_PATH` (e.g. `/app/chroma_db`)
   - `ENVIRONMENT=production`
-  - `CORS_ALLOW_ORIGINS=https://your-frontend.vercel.app`
-  - `AUTO_INIT_VECTOR_DB=true` (optional; if you mount/load sources)
-  - `INFO_SOURCE_PATH` (optional; where markdown sources live)
+  - `CHROMA_DB_PATH=/app/chroma_db`
+  - `INFO_SOURCE_PATH=/opt/render/project/src/information_source`
+  - `AUTO_INIT_VECTOR_DB=true` (optional)
+  - `CORS_ALLOW_ORIGINS=https://your-frontend.onrender.com`
   - `REINDEX_TOKEN` (required if you want to use the re-index endpoint)
+
+Frontend (Render):
+- Service name: `ai-job-seeker-frontend`
+- Root directory: `frontend`
+- Environment variables:
+  - `NEXT_PUBLIC_API_BASE_URL=https://your-backend.onrender.com`
 
 Re-index endpoint:
 ```bash
-curl -X POST https://your-backend.up.railway.app/api/admin/reindex \
+curl -X POST https://your-backend.onrender.com/api/admin/reindex \
   -H "X-Admin-Token: your-token"
 ```
 
