@@ -12,7 +12,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: CHROMA_DB_PATH
-        value: /var/data/chroma_db
+        value: /tmp/chroma_db
       - key: INFO_SOURCE_PATH
         value: /opt/render/project/src/information_source
       - key: AUTO_INIT_VECTOR_DB
