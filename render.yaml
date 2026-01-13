@@ -35,4 +35,4 @@ services:
     startCommand: npm run start
     envVars:
       - key: NEXT_PUBLIC_API_BASE_URL
-        sync: false
+        value: https://ai-job-seeker-backend-p61j.onrender.com
