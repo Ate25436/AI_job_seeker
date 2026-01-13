@@ -21,10 +21,6 @@ services:
         sync: false
       - key: REINDEX_TOKEN
         sync: false
-    disk:
-      name: chroma-db
-      mountPath: /var/data/chroma_db
-      sizeGB: 1
 
   - type: web
     name: ai-job-seeker-frontend
