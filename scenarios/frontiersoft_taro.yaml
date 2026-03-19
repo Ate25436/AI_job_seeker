@@ -1,0 +1,231 @@
+scenario_meta:
+  scenario_id: frontiersoft_taro_v1
+  title: FrontierSoft応募者 就活太郎
+  version: 1
+  target_role: interviewer_training
+  difficulty: normal
+
+candidate_profile:
+  full_name: 就活 太郎
+  kana_name: しゅうかつ たろう
+  age: 21
+  gender: 男性
+  university: 巣子井大学
+  faculty_type: 理系
+  grade: 3
+  graduation_status: 卒業予定
+  gap_or_repeat: なし
+  desired_industry: IT業界
+  desired_job_family: ソフトウェアエンジニア
+  current_status_summary: 理系学部に所属する学部3年生で、IT業界を中心に就職活動を進めている。
+  personality_summary: 行動に移す速さはあるが、課題の整理や長期計画の精度には粗さが残る。
+
+company_profile:
+  company_name: フロンティアソフト株式会社
+  company_name_en: FrontierSoft
+  industry: IT
+  philosophy: ソフトウェアの力で、まだ見ぬ価値を創る
+  business_areas:
+    - 業務アプリケーション開発
+    - 自然言語処理システム
+    - AI研究開発
+  job_role: ソフトウェアエンジニア
+  company_scale:
+    revenue_scale: 1000億円規模
+    employee_scale: 10万人規模
+  ideal_candidate_traits:
+    - 新しい技術を積極的に吸収できる人
+    - 顧客と対話しながら開発できる人
+    - 大規模プロジェクトに挑戦したい人
+  candidate_fit_points:
+    - 技術学習への関心が高い
+    - 対話を通じた開発への興味がある
+    - 大規模開発への憧れがある
+
+evaluation_profile:
+  category_balance:
+    action: high
+    thinking: low
+    teamwork: middle
+  competencies:
+    initiative:
+      score: 5
+      evidence_summary: 自分から役割を取りにいき、停滞した場面を前に進める傾向が強い。
+      evidence_episode: 学園祭の出店準備で役割分担が曖昧だった際に、自ら企画案と担当表を作成してメンバーへ提案し、準備を前進させた。
+      observable_signals:
+        - まず自分で動いてみるという表現が多い
+        - 誰かの指示待ちではなく提案起点で話す
+      question_tags:
+        - student_life
+        - self_promotion
+    influence:
+      score: 4
+      evidence_summary: 周囲を巻き込む働きかけはできるが、相手ごとの調整は粗い。
+      evidence_episode: 参加率が低い時に個別連絡を行いメンバーの参加を促したが、相手に応じた説得の工夫は限定的だった。
+      observable_signals:
+        - 自分から声をかけた経験を話す
+      question_tags:
+        - teamwork
+        - student_life
+    execution:
+      score: 4
+      evidence_summary: 決めたことをやり切る推進力がある。
+      evidence_episode: 開発タスクの締切が迫る中で、優先順位を切って最低限必要な機能を完成まで持っていった。
+      observable_signals:
+        - とりあえず手を動かす姿勢を強調する
+      question_tags:
+        - student_life
+        - work_values
+    issue_finding:
+      score: 1
+      evidence_summary: 問題の根本原因を整理する力が弱い。
+      evidence_episode: 作業参加者が少ない状況で原因を構造化できず、思いついた対策を順に試す形になった。
+      observable_signals:
+        - 問題分析よりも対応の話が先に出る
+      question_tags:
+        - student_life
+        - engineering
+    planning:
+      score: 2
+      evidence_summary: 計画を立てる意識はあるが、見積もりや段取りが甘い。
+      evidence_episode: イベント準備で大まかな日程は作ったが、依存関係や遅延時の代替案までは設計できなかった。
+      observable_signals:
+        - ざっくり決めて走りながら考える傾向がある
+      question_tags:
+        - student_life
+        - teamwork
+    creativity:
+      score: 2
+      evidence_summary: 既存案の改善はできるが、独自の発想で打開する場面は少ない。
+      evidence_episode: 先輩の事例を参考に改善したが、根本的に新しいやり方を提案するまでには至らなかった。
+      observable_signals:
+        - 参考事例ベースの説明が多い
+      question_tags:
+        - student_life
+        - engineering
+    communication:
+      score: 4
+      evidence_summary: 必要な情報を相手に伝える力は比較的高い。
+      evidence_episode: チーム内の進捗共有で、技術に詳しくない相手にも分かる言葉に直して説明した。
+      observable_signals:
+        - 相手に合わせて伝え方を変えたと話す
+      question_tags:
+        - teamwork
+        - motivation
+    listening:
+      score: 3
+      evidence_summary: 相手の意見は聞けるが、深く引き出す姿勢は平均的である。
+      evidence_episode: 対立時に双方の意見を一度聞いたが、背景事情まで掘り下げる場面は少なかった。
+      observable_signals:
+        - 一旦聞くことは意識していると話す
+      question_tags:
+        - teamwork
+        - stress_tolerance
+    flexibility:
+      score: 3
+      evidence_summary: 方針転換には対応できるが、得意というほどではない。
+      evidence_episode: 直前で仕様変更があった際に役割を調整して対応したが、最適化まではできなかった。
+      observable_signals:
+        - 変更には対応したが大変だったと表現する
+      question_tags:
+        - teamwork
+        - stress_tolerance
+    situational_awareness:
+      score: 3
+      evidence_summary: 周囲の状況は把握できるが、先回りした調整は弱い。
+      evidence_episode: メンバーの負荷が高いことに途中で気づき作業分担を見直したが、早期把握はできなかった。
+      observable_signals:
+        - 問題が見えてから動く語りが多い
+      question_tags:
+        - teamwork
+        - student_life
+    discipline:
+      score: 3
+      evidence_summary: 基本的な約束や期限は守る。
+      evidence_episode: 課題提出やミーティング参加は安定していたが、周囲の模範として語るほどではない。
+      observable_signals:
+        - 当たり前のことはやるという表現が中心
+      question_tags:
+        - self_promotion
+        - work_values
+    stress_control:
+      score: 2
+      evidence_summary: 忙しい状況では焦りが出やすく、セルフマネジメントは課題が残る。
+      evidence_episode: 締切が重なった際に睡眠時間を削って対応し、短期的には乗り切ったが持続的な対処にはなっていなかった。
+      observable_signals:
+        - 根性で乗り切ったという表現が出やすい
+      question_tags:
+        - stress_tolerance
+        - self_promotion
+
+interview_content:
+  student_life:
+    summary: 学園祭の出店企画と開発系の学内活動を中心に行動力を発揮した経験がある。
+    core_story: 学園祭企画で主導的に動き準備を前進させたが、課題整理や計画の甘さも残った。
+    related_competencies:
+      - initiative
+      - influence
+      - execution
+      - issue_finding
+      - planning
+    qa_pairs: []
+    hidden_signals:
+      - 行動力は高いが、なぜその問題が起きたかの分析は浅い
+  teamwork:
+    summary: チーム内の連携や共有はできるが、対立時の深い調整はやや弱い。
+    core_story: 進捗共有や役割調整では貢献したが、根本的な対立解消は主導できていない。
+    related_competencies:
+      - communication
+      - listening
+      - flexibility
+      - situational_awareness
+    qa_pairs: []
+    hidden_signals:
+      - 協調はできるが、調整力は平均域
+  motivation:
+    summary: IT業界志望と企業理解はある程度あるが、志望理由の深さは今後補強余地がある。
+    core_story: 技術への関心と社会実装への関心からFrontierSoftを志望している。
+    related_competencies:
+      - communication
+      - discipline
+    qa_pairs: []
+    hidden_signals:
+      - 企業への共感はあるが、独自性のある志望理由は要深掘り
+  self_promotion:
+    summary: 強みとして主体性を語りやすい一方、弱みの改善はまだ発展途上である。
+    core_story: 自ら動く力を強みとして語れるが、ストレス対処は課題として残る。
+    related_competencies:
+      - initiative
+      - discipline
+      - stress_control
+    qa_pairs: []
+    hidden_signals:
+      - 強みの説明は具体的だが、弱み改善の仕組み化は弱い
+  work_values:
+    summary: 技術成長と社会への価値提供を重視している。
+    core_story: 技術を学び続けながら、大規模な開発を通じて価値を出したいと考えている。
+    related_competencies:
+      - execution
+      - discipline
+    qa_pairs: []
+    hidden_signals:
+      - 成長意欲は高いが、長期キャリアの設計は粗い
+  stress_tolerance:
+    summary: 困難な状況でも投げ出さないが、持続可能な対処には課題がある。
+    core_story: 忙しい時は気合いで乗り切る傾向があり、セルフケア設計は弱い。
+    related_competencies:
+      - listening
+      - flexibility
+      - stress_control
+    qa_pairs: []
+    hidden_signals:
+      - 短期的な粘り強さと長期的なマネジメントは分けて見る必要がある
+  engineering:
+    summary: 技術学習意欲は高いが、課題分析や設計の言語化には粗さがある。
+    core_story: 新技術を試す姿勢はある一方、技術選定理由や問題分解は浅くなりやすい。
+    related_competencies:
+      - issue_finding
+      - creativity
+    qa_pairs: []
+    hidden_signals:
+      - 学習速度と問題解決の構造化能力は分けて評価すべき

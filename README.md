@@ -87,7 +87,6 @@
 - `low` カテゴリ内の項目は1か2のみを許容する
 - `middle` カテゴリ内の項目は3を中心とし，必要に応じて2または4も許容する
 - `middle` カテゴリでは3項目以上ある場合，少なくとも過半数を3にする
-- 1カテゴリ内の全項目が同点になるのは避け，1点分のばらつきを持たせる
 - 12項目全体を見たときに，スコアの高低差が視認しやすい分布にする
 
 ### 根拠文のフォーマット
@@ -127,6 +126,113 @@
 - 採点時には項目名のみを表示し，正解カテゴリの `high / middle / low` は見せない
 - フィードバックでは，各項目の差分だけでなく，カテゴリ単位でもずれを集計する
 - まずは全項目を同一重みで扱い，将来的に重要度重み付けを検討する
+
+## 就活生シナリオデータ仕様
+
+### 採用する保存形式
+- シナリオの正本データは YAML で管理する
+- 理由は，人がレビューしやすく，ネスト構造を素直に書けて，日本語の記述量が多い今回の用途に向いているため
+- RAGで参照する Markdown は，YAML から生成または派生管理する前提とする
+- 初期配置先は `scenarios/` ディレクトリとする
+
+### シナリオ全体の構成
+- 1シナリオは以下の5ブロックで構成する
+  - `scenario_meta`: シナリオID，タイトル，バージョン，利用対象
+  - `candidate_profile`: 就活生の基本プロフィール
+  - `company_profile`: 志望企業の情報
+  - `evaluation_profile`: 12項目の評価スコアと根拠
+  - `interview_content`: 面接で答える回答データ群
+- `evaluation_profile` を正解データの中核とし，`interview_content` はその評価と矛盾しないように記述する
+
+### 就活生の基本プロフィール項目
+- 初期シナリオでは以下の項目を必須とする
+  - `full_name`
+  - `kana_name`
+  - `age`
+  - `gender`
+  - `university`
+  - `faculty_type`
+  - `grade`
+  - `graduation_status`
+  - `gap_or_repeat`
+  - `desired_industry`
+  - `desired_job_family`
+  - `current_status_summary`
+  - `personality_summary`
+- READMEで固めた初期設定は固定シナリオへ反映する
+  - 名前: 就活 太郎
+  - 理系
+  - 巣子井大学卒業予定
+  - 3年生
+  - 男性
+  - 21歳
+  - 浪人・留年なし
+  - IT業界志望
+
+### 面接回答データの項目
+- 回答データは質問カテゴリ単位で保持する
+- MVPで持つカテゴリは以下の7つとする
+  - `student_life`
+  - `teamwork`
+  - `motivation`
+  - `self_promotion`
+  - `work_values`
+  - `stress_tolerance`
+  - `engineering`
+- 各カテゴリで持つ項目は以下とする
+  - `summary`: そのカテゴリ全体の一言要約
+  - `core_story`: 中心になるエピソード
+  - `qa_pairs`: 想定質問と回答本文
+  - `hidden_signals`: 面接官が深掘りで見抜ける示唆
+  - `related_competencies`: 関連する評価項目ID一覧
+- `qa_pairs` の各要素は以下の構造で持つ
+  - `question_id`
+  - `question`
+  - `answer`
+  - `source_evidence_ids`
+  - `tone_notes`
+
+### 企業情報として参照させる項目
+- 企業情報は以下の項目を必須とする
+  - `company_name`
+  - `company_name_en`
+  - `industry`
+  - `philosophy`
+  - `business_areas`
+  - `job_role`
+  - `company_scale`
+  - `ideal_candidate_traits`
+  - `candidate_fit_points`
+- READMEで固めた初期設定は固定シナリオへ反映する
+  - フロンティアソフト株式会社
+  - `FrontierSoft`
+  - 企業理念: ソフトウェアの力で、まだ見ぬ価値を創る
+  - 業務アプリケーション開発
+  - 自然言語処理システム
+  - AI研究開発
+  - 売上1000億円規模
+  - 従業員10万人規模
+  - 新しい技術を積極的に吸収できる人
+  - 顧客と対話しながら開発できる人
+  - 大規模プロジェクトに挑戦したい人
+
+### 評価・根拠・回答をまとめる形式
+- `evaluation_profile` では，カテゴリ傾向と12項目詳細を分けて保持する
+- 推奨構造は以下の通りとする
+  - `category_balance`
+    - `action`: `high` / `middle` / `low`
+    - `thinking`: `high` / `middle` / `low`
+    - `teamwork`: `high` / `middle` / `low`
+  - `competencies`
+    - 項目ごとに `score`, `evidence_summary`, `evidence_episode`, `observable_signals`, `question_tags` を保持する
+- `interview_content.qa_pairs[].source_evidence_ids` で，回答と評価根拠の対応を追跡できるようにする
+- これにより「どの回答がどの評価項目の根拠だったか」をフィードバック生成に流用できる
+
+### 初期固定シナリオの方針
+- 最初の固定シナリオでは `action = high`、`thinking = low`、`teamwork = middle` を採用する
+- ガクチカやチーム経験では行動力の高さが見えるようにする
+- 一方で，課題の切り分けや計画の詰めは甘さが残るようにする
+- チーム適応やストレス対応は平均的で，一部は良いが突出はしない描き方にする
 ## アプローチ
 - あらかじめ，評価項目とそのスコアを決める
   - このとき，スコアの大小がはっきりわかるようにする
@@ -239,7 +345,7 @@
   - 浪人・留年なし
 - IT業界を志望している
 
-### 志望企業の情報
+### 志望企業の設定
 
 - フロンティアソフト株式会社（FrontierSoft）
 - 企業理念:「ソフトウェアの力で、まだ見ぬ価値を創る」
