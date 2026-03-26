@@ -13,13 +13,31 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
 from .config import get_settings, settings_for_log
-from .models import QuestionRequest, AnswerResponse, HealthResponse, ErrorResponse
+from .models import (
+    AnswerResponse,
+    ErrorResponse,
+    GameAnswerResponse,
+    GameEndRequest,
+    GameEndResponse,
+    GameQuestionRequest,
+    GameResultResponse,
+    GameSessionResponse,
+    GameStartRequest,
+    HealthResponse,
+    QuestionRequest,
+    ScoreSubmissionRequest,
+    ScoreSubmissionResponse,
+)
+from .services.game_session_service import GameSessionService
 from .services.rag_service import RAGService
+from .services.scenario_service import COMPETENCY_DEFINITIONS, ScenarioService
 from .services.vector_db_manager import VectorDBManager
 from .security import sanitize_message
 
 # Global RAG service instance
 rag_service = None
+scenario_service = ScenarioService()
+game_session_service = GameSessionService()
 settings = get_settings()
 
 # Configure logging
@@ -299,6 +317,144 @@ async def health_check():
             database_status="error",
             openai_status="error"
         )
+
+
+@app.post("/api/game/start", response_model=GameSessionResponse)
+async def start_game_session(request: GameStartRequest):
+    """Start a new interviewer training session."""
+    try:
+        if request.scenario_mode == "generated":
+            scenario = scenario_service.generate_scenario(seed=request.seed)
+        else:
+            scenario = scenario_service.load_fixed_scenario(request.scenario_file)
+
+        session = game_session_service.start_session(scenario)
+        return GameSessionResponse(
+            session_id=session["session_id"],
+            status=session["status"],
+            started_at=session["started_at"],
+            expires_at=session["expires_at"],
+            candidate_name=scenario["candidate_profile"]["full_name"],
+            company_name=scenario["company_profile"]["company_name"],
+            scenario_title=scenario["scenario_meta"]["title"],
+            remaining_seconds=game_session_service._remaining_seconds(session),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@app.post("/api/game/ask", response_model=GameAnswerResponse)
+async def ask_game_question(request: GameQuestionRequest):
+    """Ask a question within an active game session."""
+    global rag_service
+
+    if not rag_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG service is not available. Please try again later.",
+        )
+
+    try:
+        session = game_session_service.require_session(request.session_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found.",
+        ) from exc
+
+    try:
+        history = game_session_service.build_history_payload(request.session_id)
+        result = await rag_service.generate_answer(request.question.strip(), history=history)
+        session = game_session_service.append_turn(request.session_id, request.question.strip(), result["answer"])
+        return GameAnswerResponse(
+            session_id=request.session_id,
+            status=session["status"],
+            remaining_seconds=game_session_service._remaining_seconds(session),
+            answer=result["answer"],
+            sources=result["sources"],
+            timestamp=datetime.fromisoformat(result["timestamp"]),
+            processing_time_ms=result["processing_time_ms"],
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@app.post("/api/game/end", response_model=GameEndResponse)
+async def end_game_session(request: GameEndRequest):
+    """End an active game session manually."""
+    try:
+        session = game_session_service.end_session(request.session_id, reason="manual")
+        return GameEndResponse(
+            session_id=session["session_id"],
+            status=session["status"],
+            ended_at=session["ended_at"],
+            end_reason=session["end_reason"],
+            remaining_seconds=0,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found.",
+        ) from exc
+
+
+@app.post("/api/game/score", response_model=ScoreSubmissionResponse)
+async def submit_game_score(request: ScoreSubmissionRequest):
+    """Submit interviewer scores after the session ends."""
+    expected_keys = set(COMPETENCY_DEFINITIONS.keys())
+    if set(request.scores.keys()) != expected_keys:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Scores must contain all competency ids exactly once.",
+        )
+    invalid_scores = [key for key, value in request.scores.items() if not isinstance(value, int) or value < 1 or value > 5]
+    if invalid_scores:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Scores must be integers from 1 to 5. Invalid keys: {invalid_scores}",
+        )
+
+    try:
+        session = game_session_service.submit_scores(request.session_id, request.scores)
+        return ScoreSubmissionResponse(
+            session_id=session["session_id"],
+            status=session["status"],
+            submitted_at=session["score_submitted_at"],
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@app.get("/api/game/result/{session_id}", response_model=GameResultResponse)
+async def get_game_result(session_id: str):
+    """Get the current session result snapshot."""
+    try:
+        result = game_session_service.build_result(session_id)
+        return GameResultResponse(**result)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found.",
+        ) from exc
 
 
 @app.post("/api/admin/reindex", response_model=ReindexResponse)
