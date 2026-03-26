@@ -107,10 +107,10 @@ class TestRAGService:
             with patch('chromadb.PersistentClient') as mock_chroma:
                 mock_client = Mock()
                 mock_collection = Mock()
-                mock_client.get_collection.return_value = mock_collection
+                mock_client.get_or_create_collection.return_value = mock_collection
                 mock_chroma.return_value = mock_client
                 
-                rag_service = RAGService()
+                rag_service = RAGService(openai_api_key="test-key")
                 await rag_service.initialize()
                 
                 assert rag_service.openai_client is not None

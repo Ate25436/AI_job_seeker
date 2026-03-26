@@ -11,9 +11,11 @@ dependencies = [
     "openai>=2.14.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
+    "pyyaml>=6.0.3",
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.21",
     "uvicorn>=0.40.0",
+    "pytest>=9.0.2",
 ]
 
 [dependency-groups]

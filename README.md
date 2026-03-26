@@ -233,6 +233,49 @@
 - ガクチカやチーム経験では行動力の高さが見えるようにする
 - 一方で，課題の切り分けや計画の詰めは甘さが残るようにする
 - チーム適応やストレス対応は平均的で，一部は良いが突出はしない描き方にする
+
+## RAG用コンテンツ構成
+
+### 配置方針
+- 面接でAIが参照するMarkdownは `information_source/frontiersoft_taro/` に配置する
+- 直接面接官へ見せたくない正解スコアや内部評価は YAML に残し，RAG用Markdownには含めない
+- 基本情報，企業理解，各質問カテゴリをファイル分割して管理する
+
+### 初期ファイル構成
+- `00_profile.md`: 就活生の基本プロフィール
+- `01_company.md`: 志望企業に関する理解
+- `02_student_life.md`: ガクチカ
+- `03_teamwork.md`: チームワーク
+- `04_motivation.md`: 志望動機
+- `05_self_promotion.md`: 自己PR
+- `06_work_values.md`: 仕事観・価値観・将来像
+- `07_stress_tolerance.md`: ストレス耐性
+- `08_engineering.md`: エンジニア向け質問
+
+### 一貫性ルール
+- すべての回答は `scenarios/frontiersoft_taro.yaml` の設定と矛盾しない内容にする
+- `action = high` が会話から見えるように，自発的に動いた経験を複数箇所に入れる
+- `thinking = low` がにじむように，原因分析や計画精度には甘さを残す
+- `teamwork = middle` と整合するように，協調はできるが突出した調整力までは持たせない
+- ストレス耐性は低めに寄せ，短期的には踏ん張るが持続的な自己管理は課題として描く
+
+## 就活生生成ロジック
+
+### 実装方針
+- 生成ロジックは `backend/app/services/scenario_service.py` に置く
+- 固定シナリオは `scenarios/*.yaml` から読み込む
+- ランダム生成時は，固定シナリオのプロフィールと企業情報を土台にしつつ，評価傾向と評価詳細を差し替える
+
+### 生成ステップ
+- `generate_category_balance`: `action / thinking / teamwork` に `high / middle / low` を重複なしで割り当てる
+- `generate_competency_scores`: 12項目のスコアをカテゴリ傾向に合わせて生成する
+- `build_evidence_for_scores`: スコアに応じた根拠要約，根拠エピソード，可観測シグナルを生成する
+- `build_interview_content`: 生成した評価情報から面接カテゴリごとの要約，コアストーリー，隠れシグナルを組み立てる
+- `validate_scenario`: 生成結果がルールに沿っているか検証する
+
+### 固定パターン
+- 初期固定パターンとして `scenarios/frontiersoft_taro.yaml` を用意する
+- この固定パターンは動作確認，評価基準の調整，RAGコンテンツの整合確認に使う
 ## アプローチ
 - あらかじめ，評価項目とそのスコアを決める
   - このとき，スコアの大小がはっきりわかるようにする
