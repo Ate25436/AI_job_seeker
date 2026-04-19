@@ -103,4 +103,13 @@ class GameResultResponse(BaseModel):
     submitted_scores: Optional[Dict[str, int]] = None
     correct_scores: Optional[Dict[str, int]] = None
     score_diffs: Optional[Dict[str, int]] = None
+    total_absolute_diff: Optional[int] = None
+    base_score: Optional[float] = None
+    display_score: Optional[float] = None
+    feedback_mode: Optional[Literal["rule_based", "llm"]] = None
+    feedback_summary: Optional[str] = None
+    detected_competencies: Optional[List[str]] = None
+    missed_competencies: Optional[List[str]] = None
+    question_angle_gaps: Optional[Dict[str, List[str]]] = None
+    shallow_follow_up_flags: Optional[List[str]] = None
     category_balance: Optional[Dict[str, str]] = None

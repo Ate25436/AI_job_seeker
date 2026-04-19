@@ -1,9 +1,18 @@
 import axios from 'axios';
 import {
-  QuestionRequest,
   AnswerResponse,
-  HealthResponse,
   ChatHistoryItem,
+  GameAnswerResponse,
+  GameEndRequest,
+  GameEndResponse,
+  GameQuestionRequest,
+  GameResultResponse,
+  GameSessionResponse,
+  GameStartRequest,
+  HealthResponse,
+  QuestionRequest,
+  ScoreSubmissionRequest,
+  ScoreSubmissionResponse,
 } from '@/types/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -30,6 +39,33 @@ export const api = {
 
   async healthCheck(): Promise<HealthResponse> {
     const response = await apiClient.get<HealthResponse>('/api/health');
+    return response.data;
+  },
+
+  async startGameSession(
+    payload: GameStartRequest = { scenario_mode: 'fixed' }
+  ): Promise<GameSessionResponse> {
+    const response = await apiClient.post<GameSessionResponse>('/api/game/start', payload);
+    return response.data;
+  },
+
+  async askGameQuestion(payload: GameQuestionRequest): Promise<GameAnswerResponse> {
+    const response = await apiClient.post<GameAnswerResponse>('/api/game/ask', payload);
+    return response.data;
+  },
+
+  async endGameSession(payload: GameEndRequest): Promise<GameEndResponse> {
+    const response = await apiClient.post<GameEndResponse>('/api/game/end', payload);
+    return response.data;
+  },
+
+  async submitGameScore(payload: ScoreSubmissionRequest): Promise<ScoreSubmissionResponse> {
+    const response = await apiClient.post<ScoreSubmissionResponse>('/api/game/score', payload);
+    return response.data;
+  },
+
+  async getGameResult(sessionId: string): Promise<GameResultResponse> {
+    const response = await apiClient.get<GameResultResponse>(`/api/game/result/${sessionId}`);
     return response.data;
   },
 };

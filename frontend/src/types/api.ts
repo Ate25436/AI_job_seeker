@@ -1,3 +1,6 @@
+export type ChatRole = 'user' | 'assistant';
+export type FeedbackMode = 'rule_based' | 'llm';
+
 export interface QuestionRequest {
   question: string;
   history?: ChatHistoryItem[];
@@ -16,8 +19,6 @@ export interface ConversationHistory {
   answer: string;
   timestamp: string;
 }
-
-export type ChatRole = 'user' | 'assistant';
 
 export interface ChatMessage {
   id: string;
@@ -43,3 +44,107 @@ export interface ErrorResponse {
   message: string;
   timestamp: string;
 }
+
+export interface GameStartRequest {
+  scenario_mode?: 'fixed' | 'generated';
+  scenario_file?: string;
+  seed?: number;
+}
+
+export interface GameSessionResponse {
+  session_id: string;
+  status: string;
+  started_at: string;
+  expires_at: string;
+  candidate_name: string;
+  company_name: string;
+  scenario_title: string;
+  remaining_seconds: number;
+}
+
+export interface GameQuestionRequest {
+  session_id: string;
+  question: string;
+}
+
+export interface GameAnswerResponse extends AnswerResponse {
+  session_id: string;
+  status: string;
+  remaining_seconds: number;
+}
+
+export interface GameEndRequest {
+  session_id: string;
+}
+
+export interface GameEndResponse {
+  session_id: string;
+  status: string;
+  ended_at: string;
+  end_reason: string;
+  remaining_seconds: number;
+}
+
+export interface ScoreSubmissionRequest {
+  session_id: string;
+  scores: Record<string, number>;
+}
+
+export interface ScoreSubmissionResponse {
+  session_id: string;
+  status: string;
+  submitted_at: string;
+}
+
+export interface GameResultResponse {
+  session_id: string;
+  status: string;
+  started_at: string;
+  expires_at: string;
+  ended_at?: string | null;
+  end_reason?: string | null;
+  candidate_name: string;
+  company_name: string;
+  scenario_title: string;
+  answer_count: number;
+  remaining_seconds: number;
+  score_submitted: boolean;
+  submitted_scores?: Record<string, number> | null;
+  correct_scores?: Record<string, number> | null;
+  score_diffs?: Record<string, number> | null;
+  total_absolute_diff?: number | null;
+  base_score?: number | null;
+  display_score?: number | null;
+  feedback_mode?: FeedbackMode | null;
+  feedback_summary?: string | null;
+  detected_competencies?: string[] | null;
+  missed_competencies?: string[] | null;
+  question_angle_gaps?: Record<string, string[]> | null;
+  shallow_follow_up_flags?: string[] | null;
+  category_balance?: Record<string, string> | null;
+}
+
+export const COMPETENCY_FIELDS = [
+  { id: 'initiative', label: '主体性' },
+  { id: 'influence', label: '働きかけ力' },
+  { id: 'execution', label: '実行力' },
+  { id: 'issue_finding', label: '課題発見力' },
+  { id: 'planning', label: '計画力' },
+  { id: 'creativity', label: '創造力' },
+  { id: 'communication', label: '発信力' },
+  { id: 'listening', label: '傾聴力' },
+  { id: 'flexibility', label: '柔軟性' },
+  { id: 'situational_awareness', label: '状況把握力' },
+  { id: 'discipline', label: '規律性' },
+  { id: 'stress_control', label: 'ストレスコントロール' },
+] as const;
+
+export type CompetencyId = (typeof COMPETENCY_FIELDS)[number]['id'];
+
+export const COMPETENCY_LABELS: Record<CompetencyId, string> = Object.fromEntries(
+  COMPETENCY_FIELDS.map((field) => [field.id, field.label])
+) as Record<CompetencyId, string>;
+
+export const DEFAULT_SCORE_SUBMISSION: Record<CompetencyId, number> = Object.fromEntries(
+  COMPETENCY_FIELDS.map((field) => [field.id, 3])
+) as Record<CompetencyId, number>;

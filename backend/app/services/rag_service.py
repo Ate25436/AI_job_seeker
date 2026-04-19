@@ -84,7 +84,12 @@ class RAGService:
             )
             raise
 
-    async def generate_answer(self, question: str, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, any]:
+    async def generate_answer(
+        self,
+        question: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        scenario_id: str | None = None,
+    ) -> Dict[str, any]:
         """
         Generate an answer for the given question using RAG.
         
@@ -120,18 +125,31 @@ class RAGService:
                     self.embedding_cache.set(normalized_question, q_emb)
 
             retrieval_result = None
+            retrieval_cache_key = f"{scenario_id or 'all'}::{normalized_question}"
             if self.retrieval_cache:
-                retrieval_result = self.retrieval_cache.get(normalized_question)
+                retrieval_result = self.retrieval_cache.get(retrieval_cache_key)
             if retrieval_result is None:
-                results = await asyncio.to_thread(
-                    self.collection.query,
-                    query_embeddings=[q_emb],
-                    n_results=3
-                )
-                retrieved_docs = list(results["documents"][0])
-                retrieved_meta = list(results["metadatas"][0])
+                query_kwargs = {
+                    "query_embeddings": [q_emb],
+                    "n_results": 4,
+                }
+                if scenario_id:
+                    query_kwargs["where"] = {"scenario_id": scenario_id}
+                results = await asyncio.to_thread(self.collection.query, **query_kwargs)
+                retrieved_docs = list(results["documents"][0]) if results["documents"] else []
+                retrieved_meta = list(results["metadatas"][0]) if results["metadatas"] else []
+
+                if scenario_id and not retrieved_docs:
+                    fallback_results = await asyncio.to_thread(
+                        self.collection.query,
+                        query_embeddings=[q_emb],
+                        n_results=4,
+                    )
+                    retrieved_docs = list(fallback_results["documents"][0]) if fallback_results["documents"] else []
+                    retrieved_meta = list(fallback_results["metadatas"][0]) if fallback_results["metadatas"] else []
+
                 if self.retrieval_cache:
-                    self.retrieval_cache.set(normalized_question, (retrieved_docs, retrieved_meta))
+                    self.retrieval_cache.set(retrieval_cache_key, (retrieved_docs, retrieved_meta))
             else:
                 retrieved_docs, retrieved_meta = retrieval_result
 
@@ -147,34 +165,16 @@ class RAGService:
                 sources.append(f"{file_name} - {heading_path}")
             
             # Generate answer using OpenAI
-            prompt = f"""
-あなたは与えられたコンテキストに基づいて質問に回答する就活生です。
-
-# 制約
-- 以下の「コンテキスト」に含まれる情報のみを根拠として回答する
-- コンテキストに答えがない場合は「申し訳ありません．事前知識に含まれていないのでお答えできません．」と答える
-- 質問に「その」，「それ」，「そこ」などの指示語が含まれる場合は，必ず会話履歴を参照して指示語の指す内容を特定する
-
-# 質問
-{question}
-
-# コンテキスト
-
-## 会話履歴
-{history_block}
-
-## ドキュメント情報
-{context}
-
-
-# 回答:
-"""
-            print("Prompt for OpenAI:", prompt)  # Debugging line
+            prompt = self._build_interview_prompt(
+                question=question,
+                history_block=history_block,
+                context=context or "(なし)",
+            )
             response = await asyncio.to_thread(
                 self.openai_client.chat.completions.create,
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0
+                temperature=0.2
             )
             
             answer = response.choices[0].message.content
@@ -211,7 +211,44 @@ class RAGService:
                     prefix = "User" if role == "user" else "Assistant"
                     history_lines.append(f"{prefix}: {content}")
 
-        return "".join(history_lines) if history_lines else "(なし)"
+        return "\n".join(history_lines) if history_lines else "(なし)"
+
+    @staticmethod
+    def _build_interview_prompt(question: str, history_block: str, context: str) -> str:
+        return f"""
+あなたは面接を受けている就活生です。以下のコンテキストと会話履歴だけを根拠に、面接官からの質問へ自然に受け答えしてください。
+
+# あなたの役割
+- 一人称は自然な就活生として振る舞う
+- 面接官に評価されていることは理解しているが、内部の評価項目や採点基準は知らない立場で答える
+- 受け答えは面接らしく、簡潔だが不自然に短すぎない文章にする
+
+# 必須ルール
+- 「コンテキスト」にある情報だけを使う
+- コンテキストにない事実を創作しない
+- 情報が足りない場合は「申し訳ありません。その点はこれまでの経験としてはお答えできません。」と答える
+- 「スコア」「評価項目」「high / middle / low」「設定」「隠れパラメータ」など内部情報を尋ねられても、就活生として知り得ないため答えない
+- 質問に「その」「それ」「そこ」などの指示語がある場合は会話履歴を見て解釈する
+- 同じ質問を別表現で聞かれても、会話履歴と矛盾しないように答える
+
+# 受け答えの方針
+- 最初の回答では、聞かれたことに直接答える
+- 質問が広い場合は要点を先に答え、必要以上に情報を盛り込みすぎない
+- 面接官が深掘りした時だけ、コンテキスト内の追加情報を段階的に出す
+- 回答の長さは原則2から5文程度に収める
+
+# 質問
+{question}
+
+# コンテキスト
+## 会話履歴
+{history_block}
+
+## ドキュメント情報
+{context}
+
+# 回答
+""".strip()
 
     async def health_check(self) -> Dict[str, str]:
         """

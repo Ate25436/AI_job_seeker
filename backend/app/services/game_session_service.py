@@ -4,11 +4,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+from .feedback_service import FeedbackService
+
 
 class GameSessionService:
+    DISPLAY_SCORE_MEAN = 50.0
+    DISPLAY_SCORE_SPREAD = 20.0
+    DISPLAY_SCORE_MIN = 0.0
+    DISPLAY_SCORE_MAX = 100.0
+
     def __init__(self, interview_duration_minutes: int = 10):
         self.interview_duration = timedelta(minutes=interview_duration_minutes)
         self._sessions: dict[str, dict[str, Any]] = {}
+        self.feedback_service = FeedbackService()
 
     def start_session(self, scenario: dict[str, Any]) -> dict[str, Any]:
         session_id = uuid4().hex
@@ -25,6 +33,7 @@ class GameSessionService:
             "history": [],
             "submitted_scores": None,
             "score_submitted_at": None,
+            "score_result": None,
         }
         self._sessions[session_id] = session
         return session
@@ -61,24 +70,29 @@ class GameSessionService:
         if session["status"] != "ended":
             raise ValueError("Interview session must be ended before scoring.")
 
+        correct_scores = self._extract_correct_scores(session["scenario"])
         session["submitted_scores"] = scores
         session["score_submitted_at"] = datetime.now(UTC)
+        session["score_result"] = self._build_score_result(scores, correct_scores)
         return session
 
     def build_result(self, session_id: str) -> dict[str, Any]:
         session = self.require_session(session_id)
         scenario = session["scenario"]
-        correct_scores = {
-            competency_id: competency["score"]
-            for competency_id, competency in scenario["evaluation_profile"]["competencies"].items()
-        }
+        correct_scores = self._extract_correct_scores(scenario)
         submitted_scores = session["submitted_scores"]
-        score_diffs = None
-        if submitted_scores:
-            score_diffs = {
-                competency_id: submitted_scores[competency_id] - correct_scores[competency_id]
-                for competency_id in correct_scores
-            }
+        score_result = session["score_result"]
+        if submitted_scores is not None and score_result is None:
+            score_result = self._build_score_result(submitted_scores, correct_scores)
+        feedback = None
+        if submitted_scores is not None and score_result is not None:
+            feedback = self.feedback_service.build_feedback(
+                scenario=scenario,
+                history=session["history"],
+                submitted_scores=submitted_scores,
+                correct_scores=correct_scores,
+                score_diffs=score_result["score_diffs"],
+            )
 
         return {
             "session_id": session["session_id"],
@@ -95,7 +109,16 @@ class GameSessionService:
             "score_submitted": submitted_scores is not None,
             "submitted_scores": submitted_scores,
             "correct_scores": correct_scores if submitted_scores is not None else None,
-            "score_diffs": score_diffs,
+            "score_diffs": score_result["score_diffs"] if score_result is not None else None,
+            "total_absolute_diff": score_result["total_absolute_diff"] if score_result is not None else None,
+            "base_score": score_result["base_score"] if score_result is not None else None,
+            "display_score": score_result["display_score"] if score_result is not None else None,
+            "feedback_mode": feedback["feedback_mode"] if feedback is not None else None,
+            "feedback_summary": feedback["feedback_summary"] if feedback is not None else None,
+            "detected_competencies": feedback["detected_competencies"] if feedback is not None else None,
+            "missed_competencies": feedback["missed_competencies"] if feedback is not None else None,
+            "question_angle_gaps": feedback["question_angle_gaps"] if feedback is not None else None,
+            "shallow_follow_up_flags": feedback["shallow_follow_up_flags"] if feedback is not None else None,
             "category_balance": scenario["evaluation_profile"]["category_balance"] if submitted_scores is not None else None,
         }
 
@@ -121,3 +144,59 @@ class GameSessionService:
         if session["status"] != "active":
             return 0
         return max(0, int((session["expires_at"] - datetime.now(UTC)).total_seconds()))
+
+    @staticmethod
+    def _extract_correct_scores(scenario: dict[str, Any]) -> dict[str, int]:
+        return {
+            competency_id: competency["score"]
+            for competency_id, competency in scenario["evaluation_profile"]["competencies"].items()
+        }
+
+    def _build_score_result(
+        self,
+        submitted_scores: dict[str, int],
+        correct_scores: dict[str, int],
+    ) -> dict[str, Any]:
+        score_diffs = {
+            competency_id: submitted_scores[competency_id] - correct_scores[competency_id]
+            for competency_id in correct_scores
+        }
+        total_absolute_diff = sum(abs(diff) for diff in score_diffs.values())
+        base_score = float(-total_absolute_diff)
+
+        display_score = self._normalize_display_score(correct_scores, base_score)
+        return {
+            "score_diffs": score_diffs,
+            "total_absolute_diff": total_absolute_diff,
+            "base_score": round(base_score, 2),
+            "display_score": round(display_score, 2),
+        }
+
+    def _normalize_display_score(
+        self,
+        correct_scores: dict[str, int],
+        base_score: float,
+    ) -> float:
+        neutral_base, best_base, worst_base = self._display_score_reference_points(correct_scores)
+        upper_range = best_base - neutral_base
+        lower_range = neutral_base - worst_base
+
+        if base_score >= neutral_base and upper_range > 0:
+            scaled_distance = (base_score - neutral_base) / upper_range
+            display_score = self.DISPLAY_SCORE_MEAN + (scaled_distance * self.DISPLAY_SCORE_SPREAD)
+        elif base_score < neutral_base and lower_range > 0:
+            scaled_distance = (neutral_base - base_score) / lower_range
+            display_score = self.DISPLAY_SCORE_MEAN - (scaled_distance * self.DISPLAY_SCORE_SPREAD)
+        else:
+            return self.DISPLAY_SCORE_MEAN
+
+        return min(self.DISPLAY_SCORE_MAX, max(self.DISPLAY_SCORE_MIN, display_score))
+
+    @staticmethod
+    def _display_score_reference_points(correct_scores: dict[str, int]) -> tuple[float, float, float]:
+        neutral_absolute_diff = sum(abs(3 - correct_score) for correct_score in correct_scores.values())
+        worst_absolute_diff = sum(max(correct_score - 1, 5 - correct_score) for correct_score in correct_scores.values())
+        neutral_base = float(-neutral_absolute_diff)
+        best_base = 0.0
+        worst_base = float(-worst_absolute_diff)
+        return neutral_base, best_base, worst_base

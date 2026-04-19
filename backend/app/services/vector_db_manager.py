@@ -154,9 +154,13 @@ class VectorDBManager:
                 for heading, content in file_chunks:
                     # Create a hierarchical heading path for better organization
                     heading_path = heading if heading else "Introduction"
+                    path_obj = Path(file_path)
+                    scenario_id = path_obj.parent.name if path_obj.parent != Path(source_dir) else "default"
                     
                     chunks.append({
                         "file_name": file_name,
+                        "source_path": path_obj.as_posix(),
+                        "scenario_id": scenario_id,
                         "heading": heading if heading else "Introduction",
                         "content": content,
                         "heading_path": heading_path
@@ -223,6 +227,8 @@ class VectorDBManager:
                     metadatas = [
                         {
                             "file": chunk["file_name"],
+                            "source_path": chunk["source_path"],
+                            "scenario_id": chunk["scenario_id"],
                             "heading": chunk["heading"],
                             "heading_path": chunk["heading_path"]
                         }

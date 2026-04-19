@@ -1,4 +1,5 @@
 services:
+  # Backend API for the interview game flow and /api/game/result session reporting.
   - type: web
     name: ai-job-seeker-backend
     env: python
@@ -22,6 +23,7 @@ services:
       - key: REINDEX_TOKEN
         sync: false
 
+  # Frontend UI for title, interview, scoring, result, and feedback screens.
   - type: web
     name: ai-job-seeker-frontend
     env: node

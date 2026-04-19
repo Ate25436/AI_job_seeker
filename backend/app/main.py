@@ -372,7 +372,11 @@ async def ask_game_question(request: GameQuestionRequest):
 
     try:
         history = game_session_service.build_history_payload(request.session_id)
-        result = await rag_service.generate_answer(request.question.strip(), history=history)
+        result = await rag_service.generate_answer(
+            request.question.strip(),
+            history=history,
+            scenario_id=session["scenario"]["scenario_meta"]["scenario_id"],
+        )
         session = game_session_service.append_turn(request.session_id, request.question.strip(), result["answer"])
         return GameAnswerResponse(
             session_id=request.session_id,

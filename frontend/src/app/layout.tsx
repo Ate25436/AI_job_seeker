@@ -1,18 +1,5 @@
 import type { Metadata } from 'next';
-import { Fraunces, Space_Grotesk } from 'next/font/google';
 import './globals.css';
-
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-display',
-  display: 'swap',
-});
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  variable: '--font-body',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: 'AI Job Seeker',
@@ -26,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className={`${fraunces.variable} ${spaceGrotesk.variable} font-body antialiased text-[color:var(--ink)]`}>
+      <body className="font-body antialiased text-[color:var(--ink)]">
         {children}
       </body>
     </html>

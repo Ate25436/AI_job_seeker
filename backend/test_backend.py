@@ -4,12 +4,16 @@ Basic tests for the AI Job Seeker backend API
 import pytest
 import asyncio
 import os
+import shutil
 from unittest.mock import Mock, patch, AsyncMock
+from pathlib import Path
+from datetime import datetime
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 # Import the FastAPI app and services
 from app.main import app
+import app.main as main_module
 from app.services.rag_service import RAGService
 from app.services.vector_db_manager import VectorDBManager
 
@@ -19,6 +23,7 @@ class TestFastAPIEndpoints:
     
     def setup_method(self):
         """Set up test client"""
+        main_module.rag_service = None
         self.client = TestClient(app)
     
     def test_root_endpoint(self):
@@ -167,6 +172,41 @@ class TestRAGService:
                 assert result["answer"] == "Test answer"
                 assert len(result["sources"]) > 0
 
+    def test_build_history_block_uses_newlines(self):
+        history_block = RAGService._build_history_block(
+            [
+                {"role": "user", "content": "first question"},
+                {"role": "assistant", "content": "first answer"},
+            ]
+        )
+        assert history_block == "User: first question\nAssistant: first answer"
+
+    @pytest.mark.asyncio
+    async def test_generate_answer_with_scenario_filter(self, mock_openai_client, mock_chroma_collection):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            rag_service = RAGService()
+            rag_service.openai_client = mock_openai_client
+            rag_service.collection = mock_chroma_collection
+
+            async def fake_to_thread(func, *args, **kwargs):
+                if func == mock_openai_client.embeddings.create:
+                    return mock_openai_client.embeddings.create.return_value
+                if func == mock_chroma_collection.query:
+                    return mock_chroma_collection.query(*args, **kwargs)
+                if func == mock_openai_client.chat.completions.create:
+                    return mock_openai_client.chat.completions.create.return_value
+                raise AssertionError("Unexpected function passed to asyncio.to_thread")
+
+            with patch("asyncio.to_thread", side_effect=fake_to_thread):
+                await rag_service.generate_answer(
+                    "Test question",
+                    history=[{"role": "user", "content": "Earlier"}],
+                    scenario_id="frontiersoft_taro_v1",
+                )
+
+            query_call = mock_chroma_collection.query.call_args
+            assert query_call.kwargs["where"] == {"scenario_id": "frontiersoft_taro_v1"}
+
 
 class TestVectorDBManager:
     """Test Vector Database Manager functionality"""
@@ -220,6 +260,62 @@ Content for heading 3"""
         chunks = db_manager.chunk_markdown("")
         # Should handle empty content gracefully
         assert isinstance(chunks, list)
+
+    def test_get_markdown_chunks_adds_scenario_metadata(self):
+        tmp_path = Path("backend/.test_markdown_chunks")
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+        scenario_dir = tmp_path / "frontiersoft_taro"
+        scenario_dir.mkdir(parents=True)
+        file_path = scenario_dir / "sample.md"
+        file_path.write_text("# Heading\ncontent", encoding="utf-8")
+
+        try:
+            db_manager = VectorDBManager()
+            chunks = db_manager.get_markdown_chunks(str(tmp_path))
+
+            assert len(chunks) == 1
+            assert chunks[0]["scenario_id"] == "frontiersoft_taro"
+            assert chunks[0]["source_path"].endswith("sample.md")
+        finally:
+            if tmp_path.exists():
+                shutil.rmtree(tmp_path)
+
+
+class TestGameApiScenarioRouting:
+    def setup_method(self):
+        self.client = TestClient(app)
+        main_module.game_session_service = main_module.GameSessionService()
+
+    def test_game_ask_passes_session_scenario_id(self):
+        class DummyRAGService:
+            def __init__(self):
+                self.calls = []
+
+            async def generate_answer(self, question, history=None, scenario_id=None):
+                self.calls.append(
+                    {"question": question, "history": history, "scenario_id": scenario_id}
+                )
+                return {
+                    "answer": "dummy",
+                    "sources": [],
+                    "timestamp": datetime.now().isoformat(),
+                    "processing_time_ms": 1,
+                }
+
+        dummy_rag = DummyRAGService()
+        main_module.rag_service = dummy_rag
+
+        start_response = self.client.post("/api/game/start", json={})
+        session_id = start_response.json()["session_id"]
+
+        ask_response = self.client.post(
+            "/api/game/ask",
+            json={"session_id": session_id, "question": "自己PRを教えてください"},
+        )
+
+        assert ask_response.status_code == 200
+        assert dummy_rag.calls[0]["scenario_id"] == "frontiersoft_taro_v1"
     
     @pytest.mark.asyncio
     async def test_get_collection_info_not_initialized(self):
@@ -227,6 +323,26 @@ Content for heading 3"""
         db_manager = VectorDBManager()
         with pytest.raises(RuntimeError, match="not initialized"):
             await db_manager.get_collection_info()
+
+
+class TestOperationalDocsAndRoutes:
+    def test_readme_deployment_mentions_reindex_endpoint_usage(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        deployment_readme = repo_root / "README_DEPLOYMENT.md"
+
+        content = deployment_readme.read_text(encoding="utf-8")
+
+        assert "/api/admin/reindex" in content
+        assert "X-Admin-Token" in content
+
+    def test_backend_exposes_admin_reindex_route(self):
+        route_paths = {
+            (method, route.path)
+            for route in app.routes
+            for method in getattr(route, "methods", set())
+        }
+
+        assert ("POST", "/api/admin/reindex") in route_paths
 
 
 if __name__ == "__main__":

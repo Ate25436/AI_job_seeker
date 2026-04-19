@@ -104,11 +104,43 @@ Frontend (Render):
 - Environment variables:
   - `NEXT_PUBLIC_API_BASE_URL=https://your-backend.onrender.com`
 
+Game flow support on Render:
+- frontend から backend の `/api/game/start`, `/api/game/ask`, `/api/game/end`, `/api/game/score`, `/api/game/result/{session_id}` を呼び出す
+- 面接ゲームは frontend と backend の両サービスがそろって初めて成立するため、CORS_ALLOW_ORIGINS と NEXT_PUBLIC_API_BASE_URL を必ず対で更新する
+- `game/result` を含む面接フロー確認をデプロイ後の疎通確認に含める
+
 Re-index endpoint:
 ```bash
 curl -X POST https://your-backend.onrender.com/api/admin/reindex \
   -H "X-Admin-Token: your-token"
 ```
+
+Markdown を更新後の re-index 手順:
+1. `information_source/` の markdown を更新する
+2. 変更をデプロイする
+3. `POST /api/admin/reindex` を呼び出してベクタDBを再構築する
+4. re-index 後に面接画面から質問し、更新した markdown が回答に反映されるか確認する
+
+```bash
+curl -X POST https://your-backend.onrender.com/api/admin/reindex \
+  -H "X-Admin-Token: ${REINDEX_TOKEN}"
+```
+
+シナリオ追加手順:
+1. `scenarios/` に YAML を追加する
+2. 必要なら `information_source/` に関連 markdown を追加する
+3. Render デプロイ後に `/api/game/start` の `scenario_file` で新シナリオを指定して起動確認する
+4. 面接終了後に `/api/game/result/{session_id}` まで通して動作確認する
+
+本番のセッション保存方針:
+- 現在の実装は `GameSessionService` のインメモリ保持で、短時間の面接ゲームを前提にする
+- 本番での session persistence は Redis などの外部ストアへ移す前提で、少なくとも `session_id`, 開始時刻, 終了時刻, 会話履歴, submitted_scores, 結果スナップショットを保存対象にする
+- Render の複数インスタンスや再起動をまたぐ用途ではインメモリのまま運用しない
+
+ログ出力方針:
+- backend はアクセスログ、ステータスコード、処理時間、re-index 実行、ゲームフローの失敗を記録する
+- frontend は個人情報を残さず、画面エラーと API 失敗を最小限に追跡する
+- logging strategy として、質問本文や機微情報は本番ログにそのまま書かない
 
 ## Vector Database Utilities
 

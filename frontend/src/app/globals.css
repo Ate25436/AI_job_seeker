@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-body: "Aptos", "Trebuchet MS", "Segoe UI", sans-serif;
   --paper: #f6f1e7;
   --paper-deep: #efe3d2;
   --ink: #1e1a16;
