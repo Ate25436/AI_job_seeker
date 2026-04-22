@@ -25,6 +25,10 @@ const apiClient = axios.create({
   },
 });
 
+export const isApiNotFoundError = (error: unknown): boolean => {
+  return axios.isAxiosError(error) && error.response?.status === 404;
+};
+
 export const api = {
   async askQuestion(
     question: string,

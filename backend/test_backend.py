@@ -102,6 +102,10 @@ class TestRAGService:
             "documents": [["Test document content"]],
             "metadatas": [[{"file": "test.md", "heading": "Test", "heading_path": "Test"}]]
         }
+        mock_collection.get.return_value = {
+            "documents": ["# 就活太郎の基本情報\n名前: 就活 太郎\n大学: 巣子井大学"],
+            "metadatas": [{"file": "00_profile", "heading": "基本プロフィール", "heading_path": "基本プロフィール"}],
+        }
         mock_collection.count.return_value = 1
         return mock_collection
     
@@ -193,8 +197,10 @@ class TestRAGService:
                     return mock_openai_client.embeddings.create.return_value
                 if func == mock_chroma_collection.query:
                     return mock_chroma_collection.query(*args, **kwargs)
+                if func == mock_chroma_collection.get:
+                    return mock_chroma_collection.get(*args, **kwargs)
                 if func == mock_openai_client.chat.completions.create:
-                    return mock_openai_client.chat.completions.create.return_value
+                    return mock_openai_client.chat.completions.create(*args, **kwargs)
                 raise AssertionError("Unexpected function passed to asyncio.to_thread")
 
             with patch("asyncio.to_thread", side_effect=fake_to_thread):
@@ -205,7 +211,17 @@ class TestRAGService:
                 )
 
             query_call = mock_chroma_collection.query.call_args
-            assert query_call.kwargs["where"] == {"scenario_id": "frontiersoft_taro_v1"}
+            assert query_call.kwargs["where"] == {
+                "scenario_id": {"$in": ["frontiersoft_taro_v1", "frontiersoft_taro"]}
+            }
+            get_call = mock_chroma_collection.get.call_args
+            assert get_call.kwargs["where"] == {
+                "scenario_id": {"$in": ["frontiersoft_taro_v1", "frontiersoft_taro"]}
+            }
+            chat_call = mock_openai_client.chat.completions.create.call_args
+            prompt = chat_call.kwargs["messages"][0]["content"]
+            assert "就活 太郎" in prompt
+            assert "巣子井大学" in prompt
 
 
 class TestVectorDBManager:

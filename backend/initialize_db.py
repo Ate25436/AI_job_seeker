@@ -7,6 +7,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Add the parent directory to the path so we can import from app
 sys.path.append(str(Path(__file__).parent))
@@ -14,8 +15,23 @@ sys.path.append(str(Path(__file__).parent))
 from app.services.vector_db_manager import VectorDBManager
 
 
+def load_env_files() -> None:
+    """Load .env files without overriding explicitly exported variables."""
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        Path.cwd() / ".env",
+        script_dir / ".env",
+        script_dir.parent / ".env",
+    ]
+    for env_path in dict.fromkeys(candidates):
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=False)
+
+
 async def main():
     """Initialize the vector database with markdown content."""
+    load_env_files()
+
     parser = argparse.ArgumentParser(description="Initialize the vector database from markdown files.")
     parser.add_argument("--source", default=os.getenv("INFO_SOURCE_PATH", "../information_source"))
     parser.add_argument("--db-path", default=os.getenv("CHROMA_DB_PATH", "./chroma_db"))

@@ -17,7 +17,7 @@ class TestTask10FrontendSpecification:
         assert "startGame" in api_source or "startGameSession" in api_source
 
     def test_frontend_interview_view_displays_timer_and_conversation_history(self):
-        page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+        page_source = (REPO_ROOT / "frontend" / "src" / "app" / "interview" / "page.tsx").read_text(encoding="utf-8")
 
         assert "remaining_seconds" in page_source or "timer" in page_source.lower()
         assert "ConversationHistory" in page_source
@@ -26,6 +26,7 @@ class TestTask10FrontendSpecification:
     def test_frontend_provides_12_item_score_input_form(self):
         frontend_sources = [
             (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(encoding="utf-8"),
+            (REPO_ROOT / "frontend" / "src" / "app" / "interview" / "page.tsx").read_text(encoding="utf-8"),
             (REPO_ROOT / "frontend" / "src" / "types" / "api.ts").read_text(encoding="utf-8"),
         ]
         combined = "\n".join(frontend_sources)
@@ -34,7 +35,12 @@ class TestTask10FrontendSpecification:
         assert "initiative" in combined and "stress_control" in combined
 
     def test_frontend_persists_game_session_state_for_reload_recovery(self):
-        page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+        page_source = "\n".join(
+            [
+                (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(encoding="utf-8"),
+                (REPO_ROOT / "frontend" / "src" / "app" / "interview" / "page.tsx").read_text(encoding="utf-8"),
+            ]
+        )
 
         assert "session_id" in page_source
         assert "localStorage" in page_source

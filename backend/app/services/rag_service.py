@@ -18,6 +18,8 @@ class RAGService:
     RAG (Retrieval-Augmented Generation) service for handling question-answering
     using ChromaDB for vector search and OpenAI for answer generation.
     """
+
+    PINNED_SCENARIO_FILES = {"00_profile", "01_company"}
     
     def __init__(
         self,
@@ -125,7 +127,8 @@ class RAGService:
                     self.embedding_cache.set(normalized_question, q_emb)
 
             retrieval_result = None
-            retrieval_cache_key = f"{scenario_id or 'all'}::{normalized_question}"
+            scenario_filter_values = self._scenario_filter_values(scenario_id)
+            retrieval_cache_key = f"{','.join(scenario_filter_values) or 'all'}::{normalized_question}"
             if self.retrieval_cache:
                 retrieval_result = self.retrieval_cache.get(retrieval_cache_key)
             if retrieval_result is None:
@@ -133,13 +136,13 @@ class RAGService:
                     "query_embeddings": [q_emb],
                     "n_results": 4,
                 }
-                if scenario_id:
-                    query_kwargs["where"] = {"scenario_id": scenario_id}
+                if scenario_filter_values:
+                    query_kwargs["where"] = self._build_scenario_where(scenario_filter_values)
                 results = await asyncio.to_thread(self.collection.query, **query_kwargs)
                 retrieved_docs = list(results["documents"][0]) if results["documents"] else []
                 retrieved_meta = list(results["metadatas"][0]) if results["metadatas"] else []
 
-                if scenario_id and not retrieved_docs:
+                if scenario_filter_values and not retrieved_docs:
                     fallback_results = await asyncio.to_thread(
                         self.collection.query,
                         query_embeddings=[q_emb],
@@ -153,10 +156,18 @@ class RAGService:
             else:
                 retrieved_docs, retrieved_meta = retrieval_result
 
+            pinned_docs, pinned_meta = await self._get_pinned_scenario_context(scenario_filter_values)
+            context_docs, context_meta = self._merge_context_docs(
+                pinned_docs,
+                pinned_meta,
+                retrieved_docs,
+                retrieved_meta,
+            )
+
             # Build context from retrieved documents
             context = ""
             sources = []
-            for doc, meta in zip(retrieved_docs, retrieved_meta):
+            for doc, meta in zip(context_docs, context_meta):
                 file_name = meta.get('file', 'Unknown')
                 heading = meta.get('heading', 'Unknown')
                 heading_path = meta.get('heading_path', heading)
@@ -212,6 +223,83 @@ class RAGService:
                     history_lines.append(f"{prefix}: {content}")
 
         return "\n".join(history_lines) if history_lines else "(なし)"
+
+    @staticmethod
+    def _scenario_filter_values(scenario_id: str | None) -> list[str]:
+        if not scenario_id:
+            return []
+
+        values = [scenario_id]
+        for suffix in ("_v1", "_v2", "_generated"):
+            if scenario_id.endswith(suffix):
+                values.append(scenario_id[: -len(suffix)])
+
+        return list(dict.fromkeys(values))
+
+    @staticmethod
+    def _build_scenario_where(scenario_filter_values: list[str]) -> dict:
+        if len(scenario_filter_values) == 1:
+            return {"scenario_id": scenario_filter_values[0]}
+        return {"scenario_id": {"$in": scenario_filter_values}}
+
+    async def _get_pinned_scenario_context(
+        self,
+        scenario_filter_values: list[str],
+    ) -> tuple[list[str], list[dict]]:
+        if not scenario_filter_values or not self.collection:
+            return [], []
+
+        try:
+            pinned_results = await asyncio.to_thread(
+                self.collection.get,
+                where=self._build_scenario_where(scenario_filter_values),
+                include=["documents", "metadatas"],
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to load pinned scenario context: %s",
+                sanitize_message(str(e), secrets=[self.openai_api_key]),
+            )
+            return [], []
+
+        docs = pinned_results.get("documents") or []
+        metas = pinned_results.get("metadatas") or []
+        pinned_docs = []
+        pinned_meta = []
+
+        for doc, meta in zip(docs, metas):
+            file_name = meta.get("file", "")
+            if file_name in self.PINNED_SCENARIO_FILES:
+                pinned_docs.append(doc)
+                pinned_meta.append(meta)
+
+        return pinned_docs, pinned_meta
+
+    @staticmethod
+    def _merge_context_docs(
+        pinned_docs: list[str],
+        pinned_meta: list[dict],
+        retrieved_docs: list[str],
+        retrieved_meta: list[dict],
+    ) -> tuple[list[str], list[dict]]:
+        docs = []
+        metas = []
+        seen = set()
+
+        for doc, meta in zip(pinned_docs + retrieved_docs, pinned_meta + retrieved_meta):
+            identity = (
+                meta.get("source_path"),
+                meta.get("file"),
+                meta.get("heading_path"),
+                doc,
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            docs.append(doc)
+            metas.append(meta)
+
+        return docs, metas
 
     @staticmethod
     def _build_interview_prompt(question: str, history_block: str, context: str) -> str:
