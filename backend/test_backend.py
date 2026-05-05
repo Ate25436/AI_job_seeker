@@ -204,7 +204,8 @@ class TestSettings:
                 encoding="utf-8",
             )
 
-            settings = Settings(_env_file=(str(repo_env), str(backend_env)))
+            with patch.dict(os.environ, {}, clear=True):
+                settings = Settings(_env_file=(str(repo_env), str(backend_env)))
 
             assert settings.cors_allow_origins_list == ["https://backend.example.com"]
         finally:
