@@ -2,6 +2,7 @@ import axios from 'axios';
 import {
   AnswerResponse,
   ChatHistoryItem,
+  GameBriefingResponse,
   GameAnswerResponse,
   GameEndRequest,
   GameEndResponse,
@@ -15,14 +16,13 @@ import {
   ScoreSubmissionResponse,
 } from '@/types/api';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+// Prefer same-origin requests so the Next.js rewrite can proxy /api calls
+// without triggering browser CORS preflight in local and proxied setups.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 export const isApiNotFoundError = (error: unknown): boolean => {
@@ -50,6 +50,13 @@ export const api = {
     payload: GameStartRequest = { scenario_mode: 'fixed' }
   ): Promise<GameSessionResponse> {
     const response = await apiClient.post<GameSessionResponse>('/api/game/start', payload);
+    return response.data;
+  },
+
+  async getGameBriefing(scenarioFile = 'frontiersoft_taro.yaml'): Promise<GameBriefingResponse> {
+    const response = await apiClient.get<GameBriefingResponse>('/api/game/briefing', {
+      params: { scenario_file: scenarioFile },
+    });
     return response.data;
   },
 

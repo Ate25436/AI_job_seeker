@@ -25,13 +25,13 @@ export default function ConversationHistoryPanel({
           onClick={onClear}
           className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)] transition hover:text-[color:var(--accent)]"
         >
-          Clear
+          履歴を消去
         </button>
       </div>
 
       {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-black/20 bg-[color:var(--paper)] px-4 py-6 text-center text-sm text-[color:var(--muted)]">
-          まだ履歴がありません。最初の質問を送信してみましょう。
+          まだ履歴がありません。最初の質問を送信してください。
         </div>
       ) : (
         items.map((item) => {

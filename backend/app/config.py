@@ -1,16 +1,34 @@
 """
 Configuration management for the application
 """
+import re
+from pathlib import Path
 from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+APP_ROOT = Path(__file__).resolve().parent
+BACKEND_ROOT = APP_ROOT.parent
+REPO_ROOT = BACKEND_ROOT.parent
+DEFAULT_CHROMA_DB_PATH = BACKEND_ROOT / "chroma_db"
+DEFAULT_INFO_SOURCE_PATH = REPO_ROOT / "information_source"
+
+
+def resolve_path_value(value: str | Path, *, base_dir: Path) -> str:
+    path = Path(value)
+    if not path.is_absolute():
+        path = base_dir / path
+    return str(path.resolve())
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=(str(REPO_ROOT / ".env"), str(BACKEND_ROOT / ".env")),
+        case_sensitive=False,
+    )
 
     openai_api_key: SecretStr = Field(..., min_length=8)
-    chroma_db_path: str = "./chroma_db"
+    chroma_db_path: str = str(DEFAULT_CHROMA_DB_PATH)
     environment: Literal["development", "staging", "production", "test"] = "development"
     log_level: str = "INFO"
     cors_allow_origins_raw: str = Field(default="", validation_alias="CORS_ALLOW_ORIGINS")
@@ -19,7 +37,7 @@ class Settings(BaseSettings):
     retrieval_cache_ttl_seconds: int = 300
     retrieval_cache_max_size: int = 128
     auto_init_vector_db: bool = False
-    info_source_path: str = "./information_source"
+    info_source_path: str = str(DEFAULT_INFO_SOURCE_PATH)
     reindex_token: SecretStr | None = None
 
     @field_validator("log_level")
@@ -42,6 +60,16 @@ class Settings(BaseSettings):
         if value < 0:
             raise ValueError(f"{info.field_name} must be >= 0")
         return value
+
+    @field_validator("chroma_db_path", mode="before")
+    @classmethod
+    def resolve_chroma_db_path(cls, value: str | Path) -> str:
+        return resolve_path_value(value, base_dir=BACKEND_ROOT)
+
+    @field_validator("info_source_path", mode="before")
+    @classmethod
+    def resolve_info_source_path(cls, value: str | Path) -> str:
+        return resolve_path_value(value, base_dir=REPO_ROOT)
 
     @model_validator(mode="after")
     def apply_environment_defaults(self):
@@ -67,7 +95,11 @@ def parse_cors_allow_origins(raw_value: str | None) -> list[str]:
     if raw_value is None:
         return []
     if isinstance(raw_value, str):
-        return [item.strip() for item in raw_value.split(",") if item.strip()]
+        return [
+            item.rstrip("/").strip()
+            for item in re.split(r"[\r\n,]+", raw_value)
+            if item.strip()
+        ]
     return list(raw_value)
 
 

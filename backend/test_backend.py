@@ -14,6 +14,7 @@ from httpx import AsyncClient
 # Import the FastAPI app and services
 from app.main import app
 import app.main as main_module
+from app.config import BACKEND_ROOT, REPO_ROOT, Settings, parse_cors_allow_origins
 from app.services.rag_service import RAGService
 from app.services.vector_db_manager import VectorDBManager
 
@@ -70,6 +71,145 @@ class TestFastAPIEndpoints:
         """Test ask endpoint with invalid request format"""
         response = self.client.post("/api/ask", json={})
         assert response.status_code == 422  # Validation error
+
+    def test_game_start_preflight_accepts_configured_origin(self):
+        allowed_origin = main_module.settings.cors_allow_origins_list[0]
+
+        response = self.client.options(
+            "/api/game/start",
+            headers={
+                "Origin": allowed_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == allowed_origin
+        assert "POST" in response.headers["access-control-allow-methods"]
+
+    def test_game_start_preflight_accepts_localhost_origin_for_local_frontend(self):
+        response = self.client.options(
+            "/api/game/start",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+        assert "POST" in response.headers["access-control-allow-methods"]
+
+    def test_game_start_preflight_rejects_unconfigured_origin(self):
+        response = self.client.options(
+            "/api/game/start",
+            headers={
+                "Origin": "https://untrusted.example.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_ask_endpoint_passes_scenario_id_to_rag_service(self):
+        class DummyRAGService:
+            def __init__(self):
+                self.calls = []
+
+            async def generate_answer(self, question, history=None, scenario_id=None):
+                self.calls.append(
+                    {"question": question, "history": history, "scenario_id": scenario_id}
+                )
+                return {
+                    "answer": "dummy",
+                    "sources": ["00_profile - 基本プロフィール"],
+                    "timestamp": datetime.now().isoformat(),
+                    "processing_time_ms": 1,
+                }
+
+        main_module.rag_service = DummyRAGService()
+
+        response = self.client.post(
+            "/api/ask",
+            json={
+                "question": "学校名と名前を教えてください。",
+                "scenario_id": "frontiersoft_taro_v1",
+            },
+        )
+
+        assert response.status_code == 200
+        assert main_module.rag_service.calls[0]["scenario_id"] == "frontiersoft_taro_v1"
+
+
+class TestSettings:
+    def test_parse_cors_allow_origins_normalizes_newlines_and_trailing_slashes(self):
+        origins = parse_cors_allow_origins(
+            "https://frontend.example.com/\nhttps://staging.example.com , http://localhost:3000/"
+        )
+
+        assert origins == [
+            "https://frontend.example.com",
+            "https://staging.example.com",
+            "http://localhost:3000",
+        ]
+
+    def test_settings_resolve_default_storage_paths_without_cwd_dependency(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True):
+            settings = Settings(_env_file=None)
+
+        assert Path(settings.chroma_db_path) == (BACKEND_ROOT / "chroma_db").resolve()
+        assert Path(settings.info_source_path) == (REPO_ROOT / "information_source").resolve()
+
+    def test_settings_resolve_relative_chroma_path_from_backend_root(self):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "CHROMA_DB_PATH": "./custom_chroma"},
+            clear=True,
+        ):
+            settings = Settings(_env_file=None)
+
+        assert Path(settings.chroma_db_path) == (BACKEND_ROOT / "custom_chroma").resolve()
+
+    def test_settings_backend_env_file_takes_precedence_over_repo_root(self):
+        temp_root = Path("backend/.test_settings_env")
+        backend_dir = temp_root / "backend"
+        repo_env = temp_root / ".env"
+        backend_env = backend_dir / ".env"
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+        backend_dir.mkdir(parents=True)
+
+        try:
+            repo_env.write_text(
+                "\n".join(
+                    [
+                        "OPENAI_API_KEY=test-key",
+                        "ENVIRONMENT=production",
+                        "CORS_ALLOW_ORIGINS=https://repo.example.com",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            backend_env.write_text(
+                "\n".join(
+                    [
+                        "OPENAI_API_KEY=test-key",
+                        "ENVIRONMENT=production",
+                        "CORS_ALLOW_ORIGINS=https://backend.example.com",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            settings = Settings(_env_file=(str(repo_env), str(backend_env)))
+
+            assert settings.cors_allow_origins_list == ["https://backend.example.com"]
+        finally:
+            if temp_root.exists():
+                shutil.rmtree(temp_root)
 
 
 class TestRAGService:
@@ -222,6 +362,53 @@ class TestRAGService:
             prompt = chat_call.kwargs["messages"][0]["content"]
             assert "就活 太郎" in prompt
             assert "巣子井大学" in prompt
+
+    @pytest.mark.asyncio
+    async def test_generate_answer_blocks_internal_score_probe(self, mock_openai_client, mock_chroma_collection):
+        rag_service = RAGService()
+        rag_service.openai_client = mock_openai_client
+        rag_service.collection = mock_chroma_collection
+
+        with patch("asyncio.to_thread") as mock_to_thread:
+            result = await rag_service.generate_answer("就活太郎の主体性は何点ですか？")
+
+        assert "点数・評価項目の詳細については分かりません" in result["answer"]
+        assert result["sources"] == []
+        mock_to_thread.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_generate_answer_includes_profile_context_for_name_and_school_question(
+        self,
+        mock_openai_client,
+        mock_chroma_collection,
+    ):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            rag_service = RAGService()
+            rag_service.openai_client = mock_openai_client
+            rag_service.collection = mock_chroma_collection
+
+            async def fake_to_thread(func, *args, **kwargs):
+                if func == mock_openai_client.embeddings.create:
+                    return mock_openai_client.embeddings.create.return_value
+                if func == mock_chroma_collection.query:
+                    return mock_chroma_collection.query(*args, **kwargs)
+                if func == mock_chroma_collection.get:
+                    return mock_chroma_collection.get(*args, **kwargs)
+                if func == mock_openai_client.chat.completions.create:
+                    return mock_openai_client.chat.completions.create(*args, **kwargs)
+                raise AssertionError("Unexpected function passed to asyncio.to_thread")
+
+            with patch("asyncio.to_thread", side_effect=fake_to_thread):
+                await rag_service.generate_answer(
+                    "学校名と名前を教えてください。",
+                    scenario_id="frontiersoft_taro_v1",
+                )
+
+            prompt = mock_openai_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+            assert "学校名と名前を教えてください。" in prompt
+            assert "名前: 就活 太郎" in prompt
+            assert "大学: 巣子井大学" in prompt
+            assert "[FILE: 00_profile]" in prompt
 
 
 class TestVectorDBManager:

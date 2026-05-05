@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
 import { GAME_FLOW_TEST_IDS } from '@/lib/timer_flow_test_support';
 import { DEFAULT_SCORE_SUBMISSION, type ChatMessage, type CompetencyId, type GameResultResponse, type GameSessionResponse } from '@/types/api';
+import { api } from '@/lib/api';
 
 type GamePhase = 'title' | 'setup' | 'interview' | 'scoring' | 'result';
 
@@ -69,19 +70,15 @@ export default function Home() {
               Interview Game
             </span>
             <h1 className="font-display text-4xl leading-tight sm:text-5xl">
-              AI就活生を見抜く
-              <span className="text-[color:var(--accent)]">面接ゲーム</span>
+              <span className="text-[color:var(--accent)]">AI就活生</span>
             </h1>
-            <p className="max-w-2xl text-sm leading-7 text-[color:var(--muted)] sm:text-base">
-              ホーム画面でルールを確認し、ゲーム開始後は面接専用ページで10分の質問、採点、結果確認までを進めます。
-            </p>
           </div>
 
           <div className="grid gap-3 rounded-[1.5rem] bg-[color:var(--ink)] px-5 py-4 text-white">
             <p className="text-xs uppercase tracking-[0.28em] text-white/60">Current Page</p>
             <p className="font-display text-3xl">Home</p>
             <p className="text-sm text-white/80">
-              固定シナリオの就活生を読み込み、面接ページへ移動します。
+              面接前の準備ページです。まず資料を確認してから、ゲームを開始してください。
             </p>
           </div>
         </header>
@@ -103,20 +100,16 @@ export default function Home() {
             <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">Briefing</p>
             <h2 className="mt-3 font-display text-3xl">面接前ブリーフィング</h2>
             <div className="mt-4 space-y-3 text-sm leading-7 text-[color:var(--muted)]">
-              <p>1. ゲーム開始で `session_id` を発行し、候補者情報を取得します。</p>
-              <p>2. 面接ページではタイマーと会話履歴を見ながら質問します。</p>
-              <p>3. 面接終了後は 12 項目を採点します。</p>
-              <p>4. 採点後に結果とフィードバックを確認します。</p>
+              <p>1. 学生のESで、学生時代の経験や志望理由を確認してください。</p>
+              <p>2. 企業概要で、何を見たい会社なのかを確認してください。</p>
+              <p>3. 評価基準一覧で、12項目の観察ポイントを確認してください。</p>
+              <p>4. 「ゲームを開始」ボタンをクリックしてください。</p>
             </div>
           </article>
 
           <article className="rounded-[2rem] border border-black/10 bg-[color:var(--paper)] p-6 shadow-[0_18px_50px_rgba(30,26,22,0.10)]">
             <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">Game Start</p>
             <h2 className="mt-3 font-display text-3xl">ゲーム開始</h2>
-            <p className="mt-4 text-sm leading-7 text-[color:var(--muted)]">
-              開始後は `/interview` に移動します。バックエンドを再起動して古いセッションが無効になった場合は、
-              面接ページ側で自動的にホームへ戻します。
-            </p>
             <button
               type="button"
               data-testid={GAME_FLOW_TEST_IDS.startButton}
@@ -124,9 +117,44 @@ export default function Home() {
               disabled={isBusy}
               className="mt-6 inline-flex rounded-full bg-[color:var(--accent)] px-6 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isBusy ? '開始中...' : 'ゲームを開始する'}
+              {isBusy ? '開始しています...' : 'ゲームを開始'}
             </button>
           </article>
+        </section>
+
+        <section className="grid gap-5 md:grid-cols-3">
+          <Link
+            href="/briefing/entry-sheet"
+            className="rounded-[2rem] border border-black/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(30,26,22,0.10)] transition hover:-translate-y-1 hover:shadow-[0_24px_56px_rgba(30,26,22,0.14)]"
+          >
+            <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">Entry Sheet</p>
+            <h2 className="mt-3 font-display text-3xl">学生のES</h2>
+            <p className="mt-4 text-sm leading-7 text-[color:var(--muted)]">
+              志望動機、学生時代に力を入れたこと、チームワークを発揮した経験が確認できます。
+            </p>
+          </Link>
+
+          <Link
+            href="/briefing/company"
+            className="rounded-[2rem] border border-black/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(30,26,22,0.10)] transition hover:-translate-y-1 hover:shadow-[0_24px_56px_rgba(30,26,22,0.14)]"
+          >
+            <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">Company Overview</p>
+            <h2 className="mt-3 font-display text-3xl">企業の概要</h2>
+            <p className="mt-4 text-sm leading-7 text-[color:var(--muted)]">
+              企業理念、事業領域、求める人物像、候補者との適合ポイントが確認できます。
+            </p>
+          </Link>
+
+          <Link
+            href="/briefing/evaluation"
+            className="rounded-[2rem] border border-black/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(30,26,22,0.10)] transition hover:-translate-y-1 hover:shadow-[0_24px_56px_rgba(30,26,22,0.14)]"
+          >
+            <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">Evaluation Criteria</p>
+            <h2 className="mt-3 font-display text-3xl">評価基準一覧</h2>
+            <p className="mt-4 text-sm leading-7 text-[color:var(--muted)]">
+              12項目の観察ポイントがカテゴリ別に確認できます。
+            </p>
+          </Link>
         </section>
       </div>
     </main>

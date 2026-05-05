@@ -14,6 +14,7 @@ class ChatMessage(BaseModel):
 class QuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=1000)
     history: Optional[List[ChatMessage]] = None
+    scenario_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 
 class AnswerResponse(BaseModel):
@@ -51,6 +52,51 @@ class GameSessionResponse(BaseModel):
     company_name: str
     scenario_title: str
     remaining_seconds: int
+
+
+class CandidateBriefingSection(BaseModel):
+    title: str
+    summary: str
+
+
+class CandidateBriefingResponse(BaseModel):
+    full_name: str
+    age: int
+    university: str
+    faculty_type: str
+    grade: int
+    desired_industry: str
+    desired_job_family: str
+    current_status_summary: str
+    personality_summary: str
+    entry_sheet_sections: List[CandidateBriefingSection]
+
+
+class CompanyBriefingResponse(BaseModel):
+    company_name: str
+    industry: str
+    philosophy: str
+    business_areas: List[str]
+    job_role: str
+    ideal_candidate_traits: List[str]
+    candidate_fit_points: List[str]
+
+
+class EvaluationCriterionResponse(BaseModel):
+    competency_id: str
+    label: str
+    category_id: str
+    category_label: str
+    question_tags: List[str]
+    high_signal: str
+    low_signal: str
+
+
+class GameBriefingResponse(BaseModel):
+    scenario_title: str
+    candidate_profile: CandidateBriefingResponse
+    company_profile: CompanyBriefingResponse
+    evaluation_criteria: List[EvaluationCriterionResponse]
 
 
 class GameQuestionRequest(BaseModel):

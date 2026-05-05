@@ -62,6 +62,51 @@ export interface GameSessionResponse {
   remaining_seconds: number;
 }
 
+export interface CandidateBriefingSection {
+  title: string;
+  summary: string;
+}
+
+export interface CandidateBriefingResponse {
+  full_name: string;
+  age: number;
+  university: string;
+  faculty_type: string;
+  grade: number;
+  desired_industry: string;
+  desired_job_family: string;
+  current_status_summary: string;
+  personality_summary: string;
+  entry_sheet_sections: CandidateBriefingSection[];
+}
+
+export interface CompanyBriefingResponse {
+  company_name: string;
+  industry: string;
+  philosophy: string;
+  business_areas: string[];
+  job_role: string;
+  ideal_candidate_traits: string[];
+  candidate_fit_points: string[];
+}
+
+export interface EvaluationCriterionResponse {
+  competency_id: string;
+  label: string;
+  category_id: string;
+  category_label: string;
+  question_tags: string[];
+  high_signal: string;
+  low_signal: string;
+}
+
+export interface GameBriefingResponse {
+  scenario_title: string;
+  candidate_profile: CandidateBriefingResponse;
+  company_profile: CompanyBriefingResponse;
+  evaluation_criteria: EvaluationCriterionResponse[];
+}
+
 export interface GameQuestionRequest {
   session_id: string;
   question: string;

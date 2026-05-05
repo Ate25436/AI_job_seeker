@@ -27,7 +27,7 @@ export default function QuestionForm({
     >
       <div className="space-y-2">
         <label className="text-sm font-medium" htmlFor="question">
-          質問内容
+          質問内容を入力してください
         </label>
         <textarea
           id="question"
@@ -35,7 +35,7 @@ export default function QuestionForm({
           rows={5}
           maxLength={1000}
           className="w-full resize-none rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm shadow-inner focus:border-[color:var(--accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-soft)]"
-          placeholder="例: 面接で自己PRを効果的に伝えるには？"
+          placeholder="例: 自己PRについて詳しく教えてください。"
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
           onKeyDown={(event) => {
@@ -47,7 +47,7 @@ export default function QuestionForm({
           required
         />
         <div className="flex items-center justify-between text-xs text-[color:var(--muted)]">
-          <span>Shift + Enter で改行、Enter で送信</span>
+          <span>Shift + Enter で改行・Enter で送信</span>
           <span>{question.length}/1000</span>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function QuestionForm({
           {isLoading ? (
             <span className="flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              生成中...
+              生成しています...
             </span>
           ) : (
             '質問を送信'
@@ -75,7 +75,7 @@ export default function QuestionForm({
         </button>
         {isLoading ? (
           <span className="text-xs text-[color:var(--teal)]">
-            RAGが回答を生成しています
+            RAGが回答を生成しています。しばらくお待ちください。
           </span>
         ) : null}
       </div>

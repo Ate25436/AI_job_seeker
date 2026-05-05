@@ -15,7 +15,11 @@ from pydantic import BaseModel
 from .config import get_settings, settings_for_log
 from .models import (
     AnswerResponse,
+    CandidateBriefingResponse,
+    CandidateBriefingSection,
     ErrorResponse,
+    EvaluationCriterionResponse,
+    GameBriefingResponse,
     GameAnswerResponse,
     GameEndRequest,
     GameEndResponse,
@@ -24,13 +28,14 @@ from .models import (
     GameSessionResponse,
     GameStartRequest,
     HealthResponse,
+    CompanyBriefingResponse,
     QuestionRequest,
     ScoreSubmissionRequest,
     ScoreSubmissionResponse,
 )
 from .services.game_session_service import GameSessionService
 from .services.rag_service import RAGService
-from .services.scenario_service import COMPETENCY_DEFINITIONS, ScenarioService
+from .services.scenario_service import CATEGORY_LABELS, COMPETENCY_DEFINITIONS, ScenarioService
 from .services.vector_db_manager import VectorDBManager
 from .security import sanitize_message
 
@@ -43,6 +48,139 @@ settings = get_settings()
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO))
 logger = logging.getLogger(__name__)
+
+
+def _ensure_rag_service_available() -> RAGService:
+    global rag_service
+
+    if not rag_service:
+        logger.error("RAG service not initialized")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG service is not available. Please try again later.",
+        )
+    return rag_service
+
+
+def _build_answer_response(result: dict) -> AnswerResponse:
+    return AnswerResponse(
+        answer=result["answer"],
+        sources=result["sources"],
+        timestamp=datetime.fromisoformat(result["timestamp"]),
+        processing_time_ms=result["processing_time_ms"],
+    )
+
+
+async def _generate_general_answer(
+    question: str,
+    history: list[dict] | None,
+    scenario_id: str | None,
+) -> AnswerResponse:
+    service = _ensure_rag_service_available()
+    result = await service.generate_answer(question, history=history, scenario_id=scenario_id)
+    return _build_answer_response(result)
+
+
+async def _generate_game_answer(session_id: str, question: str) -> GameAnswerResponse:
+    service = _ensure_rag_service_available()
+    session = game_session_service.require_session(session_id)
+    history = game_session_service.build_history_payload(session_id)
+    scenario_id = session["scenario"]["scenario_meta"]["scenario_id"]
+    result = await service.generate_answer(
+        question,
+        history=history,
+        scenario_id=scenario_id,
+    )
+    session = game_session_service.append_turn(session_id, question, result["answer"])
+    return GameAnswerResponse(
+        session_id=session_id,
+        status=session["status"],
+        remaining_seconds=game_session_service._remaining_seconds(session),
+        answer=result["answer"],
+        sources=result["sources"],
+        timestamp=datetime.fromisoformat(result["timestamp"]),
+        processing_time_ms=result["processing_time_ms"],
+    )
+
+
+def _build_game_briefing_response(scenario: dict) -> GameBriefingResponse:
+    candidate_profile = scenario["candidate_profile"]
+    company_profile = scenario["company_profile"]
+    candidate_name = candidate_profile["full_name"]
+
+    entry_sheet_sections = [
+        CandidateBriefingSection(
+            title="志望動機を教えてください。",
+            summary=(
+                f"私が{company_profile['company_name']}を志望する理由は、{company_profile['philosophy']}という理念のもとで、"
+                f"{company_profile['job_role']}として価値を出せる環境に魅力を感じているからです。"
+                f"もともと{candidate_profile['desired_industry']}を志望しており、大学で学ぶ中で技術を実際の課題解決につなげたいと考えるようになりました。"
+                f"その中で、{', '.join(company_profile['business_areas'][:2])}など幅広い領域に取り組み、対話を通じて開発を進める姿勢に強く惹かれました。"
+                f"入社後は、技術を学び続けながら社会実装に関わり、チームの中で着実に開発を進めることで会社に貢献したいと考えています。"
+            ),
+        ),
+        CandidateBriefingSection(
+            title="学生時代に力を入れたことを教えてください。",
+            summary=(
+                "学生時代に最も力を入れたのは学園祭の出店企画です。"
+                "準備の初期段階では役割分担が曖昧で全体の動きが止まりがちだったため、"
+                "私は自分から企画案と担当表を作成してメンバーに提案し、議論の土台を整えました。"
+                "その後も進捗共有や必要な声かけを続け、準備を前に進めることを意識しました。"
+                "この経験で、状況が停滞している時でも自分から動き、周囲を巻き込みながら物事を進める力を身につけました。"
+                "業務でも、曖昧な状況を整理しながら主体的に行動し、チームの前進に貢献したいと考えています。"
+            ),
+        ),
+        CandidateBriefingSection(
+            title="チームワークを発揮した経験を教えてください。",
+            summary=(
+                "チームワークを発揮した経験として、学園祭準備や学内の開発活動での進捗共有と役割調整があります。"
+                "私は自分の作業を進めるだけでなく、状況を見ながら必要な情報を分かりやすく共有し、"
+                "参加が遅れているメンバーには個別に声をかけていました。技術に詳しくない相手にも伝わるよう言葉を選び、"
+                "一度相手の意見を聞いた上で調整することを意識しました。"
+                "この経験から、相手に合わせた情報共有と役割調整がチームの成果につながることを学びました。"
+                "業務でも、周囲と連携しながら状況を整え、チーム全体が動きやすい環境づくりに貢献したいと考えています。"
+            ),
+        ),
+    ]
+
+    evaluation_criteria = [
+        EvaluationCriterionResponse(
+            competency_id=competency_id,
+            label=definition["label"],
+            category_id=definition["category_id"],
+            category_label=CATEGORY_LABELS[definition["category_id"]],
+            question_tags=list(definition["question_tags"]),
+            high_signal=definition["high_signal"],
+            low_signal=definition["low_signal"],
+        )
+        for competency_id, definition in COMPETENCY_DEFINITIONS.items()
+    ]
+
+    return GameBriefingResponse(
+        scenario_title=scenario["scenario_meta"]["title"],
+        candidate_profile=CandidateBriefingResponse(
+            full_name=candidate_profile["full_name"],
+            age=candidate_profile["age"],
+            university=candidate_profile["university"],
+            faculty_type=candidate_profile["faculty_type"],
+            grade=candidate_profile["grade"],
+            desired_industry=candidate_profile["desired_industry"],
+            desired_job_family=candidate_profile["desired_job_family"],
+            current_status_summary=candidate_profile["current_status_summary"],
+            personality_summary=candidate_profile["personality_summary"],
+            entry_sheet_sections=entry_sheet_sections,
+        ),
+        company_profile=CompanyBriefingResponse(
+            company_name=company_profile["company_name"],
+            industry=company_profile["industry"],
+            philosophy=company_profile["philosophy"],
+            business_areas=list(company_profile["business_areas"]),
+            job_role=company_profile["job_role"],
+            ideal_candidate_traits=list(company_profile["ideal_candidate_traits"]),
+            candidate_fit_points=list(company_profile["candidate_fit_points"]),
+        ),
+        evaluation_criteria=evaluation_criteria,
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -81,9 +219,11 @@ async def lifespan(app: FastAPI):
                         collection_name="markdown_rag",
                         openai_api_key=settings.openai_api_key.get_secret_value(),
                     )
-                    await vector_manager.initialize()
-                    await vector_manager.initialize_from_markdown(str(info_source_dir))
-                    await vector_manager.close()
+                    try:
+                        await vector_manager.initialize()
+                        await vector_manager.initialize_from_markdown(str(info_source_dir))
+                    finally:
+                        await vector_manager.close()
                 else:
                     logger.info("Auto init skipped: collection already has %s documents", count)
     except Exception as e:
@@ -114,6 +254,7 @@ class ReindexResponse(BaseModel):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins_list,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,7 +271,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         sanitize_message(str(exc)),
     )
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=ErrorResponse(
             error="validation_error",
             message="Invalid request data.",
@@ -216,43 +357,40 @@ async def ask_question(request: QuestionRequest):
     Raises:
         HTTPException: If RAG service is not available or question processing fails
     """
-    global rag_service
-    
-    if not rag_service:
-        logger.error("RAG service not initialized")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAG service is not available. Please try again later."
-        )
-    
+    _ensure_rag_service_available()
+
     try:
-        # Validate question content
         question = request.question.strip()
         if not question:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Question cannot be empty or contain only whitespace."
             )
-        
+
         if settings.environment == "development":
-            logger.info("Processing question: %s...", question[:100])
+            logger.info(
+                "Processing general question: %s... (scenario_id=%s)",
+                question[:100],
+                request.scenario_id or "none",
+            )
         else:
-            logger.info("Processing question with length: %s", len(question))
-        
-        # Generate answer using RAG service
-        result = await rag_service.generate_answer(question, history=request.history)
-        
-        # Create response
-        response = AnswerResponse(
-            answer=result["answer"],
-            sources=result["sources"],
-            timestamp=datetime.fromisoformat(result["timestamp"]),
-            processing_time_ms=result["processing_time_ms"]
+            logger.info(
+                "Processing general question with length: %s (scenario_id=%s)",
+                len(question),
+                request.scenario_id or "none",
+            )
+
+        response = await _generate_general_answer(
+            question,
+            history=request.history,
+            scenario_id=request.scenario_id,
         )
-        
-        logger.info("Question processed successfully in %sms", result["processing_time_ms"])
+
+        logger.info("General question processed successfully in %sms", response.processing_time_ms)
         return response
-        
+
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.warning("Invalid question input: %s", sanitize_message(str(e)))
         raise HTTPException(
@@ -319,6 +457,24 @@ async def health_check():
         )
 
 
+@app.get("/api/game/briefing", response_model=GameBriefingResponse)
+async def get_game_briefing(scenario_file: str = "frontiersoft_taro.yaml"):
+    """Get pre-interview briefing data for the home screen."""
+    try:
+        scenario = scenario_service.load_fixed_scenario(scenario_file)
+        return _build_game_briefing_response(scenario)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
 @app.post("/api/game/start", response_model=GameSessionResponse)
 async def start_game_session(request: GameStartRequest):
     """Start a new interviewer training session."""
@@ -354,39 +510,26 @@ async def start_game_session(request: GameStartRequest):
 @app.post("/api/game/ask", response_model=GameAnswerResponse)
 async def ask_game_question(request: GameQuestionRequest):
     """Ask a question within an active game session."""
-    global rag_service
-
-    if not rag_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAG service is not available. Please try again later.",
-        )
-
     try:
-        session = game_session_service.require_session(request.session_id)
+        question = request.question.strip()
+        if not question:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Question cannot be empty or contain only whitespace.",
+            )
+
+        response = await _generate_game_answer(request.session_id, question)
+        logger.info(
+            "Game question processed successfully in %sms for session %s",
+            response.processing_time_ms,
+            request.session_id,
+        )
+        return response
     except KeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
         ) from exc
-
-    try:
-        history = game_session_service.build_history_payload(request.session_id)
-        result = await rag_service.generate_answer(
-            request.question.strip(),
-            history=history,
-            scenario_id=session["scenario"]["scenario_meta"]["scenario_id"],
-        )
-        session = game_session_service.append_turn(request.session_id, request.question.strip(), result["answer"])
-        return GameAnswerResponse(
-            session_id=request.session_id,
-            status=session["status"],
-            remaining_seconds=game_session_service._remaining_seconds(session),
-            answer=result["answer"],
-            sources=result["sources"],
-            timestamp=datetime.fromisoformat(result["timestamp"]),
-            processing_time_ms=result["processing_time_ms"],
-        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -489,9 +632,11 @@ async def reindex_vector_db(request: Request):
             collection_name="markdown_rag",
             openai_api_key=settings.openai_api_key.get_secret_value(),
         )
-        await vector_manager.initialize()
-        result = await vector_manager.re_index(str(info_source_dir))
-        await vector_manager.close()
+        try:
+            await vector_manager.initialize()
+            result = await vector_manager.re_index(str(info_source_dir))
+        finally:
+            await vector_manager.close()
         return ReindexResponse(
             status=result["status"],
             message=result["message"],

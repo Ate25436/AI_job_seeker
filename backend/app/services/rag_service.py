@@ -20,6 +20,53 @@ class RAGService:
     """
 
     PINNED_SCENARIO_FILES = {"00_profile", "01_company"}
+    INTERNAL_INFO_REFUSAL = (
+        "申し訳ありません。面接でどのように評価されるかや、私自身の点数・評価項目の詳細については分かりません。"
+        "面接でお伝えできる経験や考え方についてであればお答えします。"
+    )
+    INTERNAL_INFO_KEYWORDS = {
+        "score",
+        "scores",
+        "スコア",
+        "点数",
+        "何点",
+        "評価項目",
+        "採点基準",
+        "評価基準",
+        "内部情報",
+        "内部設定",
+        "隠れパラメータ",
+        "hidden parameter",
+        "category_balance",
+        "high / middle / low",
+        "high/middle/low",
+    }
+    COMPETENCY_PROBE_TERMS = {
+        "initiative",
+        "influence",
+        "execution",
+        "issue_finding",
+        "planning",
+        "creativity",
+        "communication",
+        "listening",
+        "flexibility",
+        "situational_awareness",
+        "discipline",
+        "stress_control",
+        "主体性",
+        "働きかけ力",
+        "実行力",
+        "課題発見力",
+        "計画力",
+        "創造力",
+        "発信力",
+        "傾聴力",
+        "柔軟性",
+        "状況把握力",
+        "規律性",
+        "ストレスコントロール",
+    }
     
     def __init__(
         self,
@@ -111,6 +158,14 @@ class RAGService:
             start_time = datetime.now()
 
             normalized_question = question.strip()
+            if self._is_internal_info_probe(normalized_question):
+                end_time = datetime.now()
+                return {
+                    "answer": self.INTERNAL_INFO_REFUSAL,
+                    "sources": [],
+                    "timestamp": end_time.isoformat(),
+                    "processing_time_ms": int((end_time - start_time).total_seconds() * 1000),
+                }
             history_block = self._build_history_block(history)
 
             q_emb = None
@@ -223,6 +278,22 @@ class RAGService:
                     history_lines.append(f"{prefix}: {content}")
 
         return "\n".join(history_lines) if history_lines else "(なし)"
+
+    @classmethod
+    def _is_internal_info_probe(cls, question: str) -> bool:
+        normalized = question.casefold()
+        if any(keyword in normalized for keyword in cls.INTERNAL_INFO_KEYWORDS):
+            return True
+
+        asks_for_points = any(token in question for token in ("何点", "点数", "スコア"))
+        mentions_competency = any(term.casefold() in normalized for term in cls.COMPETENCY_PROBE_TERMS)
+        if asks_for_points and mentions_competency:
+            return True
+
+        if "評価" in question and mentions_competency:
+            return True
+
+        return False
 
     @staticmethod
     def _scenario_filter_values(scenario_id: str | None) -> list[str]:

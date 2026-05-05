@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ConversationHistory from '@/components/ConversationHistory';
 import QuestionForm from '@/components/QuestionForm';
+import ScoreEditor from '@/components/ScoreEditor';
 import { api, isApiNotFoundError } from '@/lib/api';
+import { readStoredGameState, readStoredScores, STORAGE_KEY, type GamePhase, type StoredGameState } from '@/lib/gameState';
 import { GAME_FLOW_TEST_IDS } from '@/lib/timer_flow_test_support';
 import {
-  COMPETENCY_FIELDS,
   COMPETENCY_LABELS,
   DEFAULT_SCORE_SUBMISSION,
   type ChatMessage,
@@ -15,20 +16,6 @@ import {
   type GameResultResponse,
   type GameSessionResponse,
 } from '@/types/api';
-
-type GamePhase = 'title' | 'setup' | 'interview' | 'scoring' | 'result';
-
-type StoredGameState = {
-  game: {
-    phase: GamePhase;
-    session: GameSessionResponse | null;
-    messages: ChatMessage[];
-    scores: Record<CompetencyId, number>;
-    result: GameResultResponse | null;
-  };
-};
-
-const STORAGE_KEY = 'ai-job-seeker-game';
 
 const createId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -67,6 +54,10 @@ export default function Home() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const autoEndingRef = useRef(false);
 
+  const openBriefingPage = (path: string) => {
+    window.open(`${path}?from=interview`, '_blank');
+  };
+
   const resetGameState = useCallback((note: string | null = null) => {
     setPhase('title');
     setSession(null);
@@ -92,19 +83,13 @@ export default function Home() {
       return;
     }
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
+    const parsed = readStoredGameState();
+    if (!parsed) {
       resetGameState('面接セッションがないため、ホーム画面に戻しました。');
       return;
     }
 
     try {
-      const parsed = JSON.parse(stored) as StoredGameState;
-      if (!parsed?.game) {
-        resetGameState('面接セッションがないため、ホーム画面に戻しました。');
-        return;
-      }
-
       setPhase(parsed.game.phase ?? 'title');
       setSession(parsed.game.session ?? null);
       setMessages(Array.isArray(parsed.game.messages) ? parsed.game.messages : []);
@@ -156,6 +141,28 @@ export default function Home() {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [hasLoadedStoredState, messages, phase, result, scores, session]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) {
+        return;
+      }
+
+      setScores((previous) => {
+        const nextScores = readStoredScores();
+        const previousJson = JSON.stringify(previous);
+        const nextJson = JSON.stringify(nextScores);
+        return previousJson === nextJson ? previous : nextScores;
+      });
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     if (!chatScrollRef.current) {
@@ -253,7 +260,7 @@ export default function Home() {
       }
     } catch (error) {
       if (isApiNotFoundError(error)) {
-        resetGameState('面接セッションが見つからないため、タイトル画面に戻しました。');
+        resetGameState('面接セッションが見つからないため、タイトル画面に戻りました。');
         return;
       }
       setErrorMessage('面接終了に失敗しました。結果取得前に再試行してください。');
@@ -287,7 +294,7 @@ export default function Home() {
       setPhase('result');
     } catch (error) {
       if (isApiNotFoundError(error)) {
-        resetGameState('面接セッションが見つからないため、タイトル画面に戻しました。');
+        resetGameState('面接セッションが見つからないため、タイトル画面に戻りました。');
         return;
       }
       setErrorMessage('採点結果の送信に失敗しました。入力内容を確認してください。');
@@ -305,7 +312,7 @@ export default function Home() {
       return '面接セッションを開始してください。';
     }
     if (phase === 'interview') {
-      return `${session.company_name} の面接中です。会話ログを見ながら深掘りしてください。`;
+      return `${session.company_name} の面接中です。会話ログを確認しながら深掘りしてください。`;
     }
     if (phase === 'scoring') {
       return '面接は終了しました。12項目を1から5で採点してください。';
@@ -313,7 +320,7 @@ export default function Home() {
     if (phase === 'result') {
       return '結果とフィードバックを確認し、次の質問設計に活かしてください。';
     }
-    return '就活生の見極めゲームを開始できます。';
+    return '就活生の見極めゲームを開始してください。';
   }, [phase, session]);
 
   const scoreSummary = useMemo(() => {
@@ -338,12 +345,13 @@ export default function Home() {
               Interview Game
             </span>
             <h1 className="font-display text-4xl leading-tight sm:text-5xl">
-              AI就活生を見抜く
-              <span className="text-[color:var(--accent)]">面接ゲーム</span>
+              <span className="text-[color:var(--accent)]">AI就活生</span>
             </h1>
             <p className="max-w-2xl text-sm leading-7 text-[color:var(--muted)] sm:text-base">
-              ホーム画面で開始した面接セッションを使って、10分の面接、12項目採点、結果とフィードバック確認までを進めます。
-              リロード時は localStorage から game 状態を復元します。
+              10分間面接を行って，就活生を12項目で採点してください。
+            </p>
+            <p className="max-w-2xl text-sm leading-7 text-[color:var(--muted)] sm:text-base">
+              採点を送信した後，フィードバックを確認できます
             </p>
           </div>
 
@@ -370,7 +378,7 @@ export default function Home() {
             <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">No Active Session</p>
             <h2 className="mt-3 font-display text-3xl">面接セッションがありません</h2>
             <p className="mt-4 text-sm leading-7 text-[color:var(--muted)]">
-              ホーム画面からゲームを開始してください。古いセッション情報が残っている場合は自動的に破棄されます。
+              ホーム画面からゲームを開始してください。古いセッション情報が残っている場合は、自動的に破棄されます。
             </p>
             <button
               type="button"
@@ -398,7 +406,7 @@ export default function Home() {
                 <p className="text-xs uppercase tracking-[0.28em] text-white/60">Timer</p>
                 <p className="mt-3 font-display text-5xl">{formatRemainingSeconds(remainingSeconds)}</p>
                 <p className="mt-2 text-sm text-white/75">
-                  10分経過で自動的に面接を終了し、採点画面へ遷移します。
+                  10分経過までに面接を進めてください。時間切れになると、自動的に採点画面へ移動します。
                 </p>
               </div>
 
@@ -407,11 +415,36 @@ export default function Home() {
                   <dt className="text-xs uppercase tracking-[0.2em]">Company</dt>
                   <dd className="text-base text-[color:var(--ink)]">{session.company_name}</dd>
                 </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-[0.2em]">Session</dt>
-                  <dd className="break-all text-base text-[color:var(--ink)]">{session.session_id}</dd>
-                </div>
               </dl>
+
+              <div className="rounded-[1.5rem] border border-black/10 bg-[color:var(--paper)] px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted)]">
+                  Briefing Pages
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openBriefingPage('/briefing/entry-sheet')}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-xs text-[color:var(--ink)] transition hover:bg-[color:var(--accent)]/10"
+                  >
+                    学生のES
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openBriefingPage('/briefing/company')}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-xs text-[color:var(--ink)] transition hover:bg-[color:var(--accent)]/10"
+                  >
+                    企業の概要
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openBriefingPage('/briefing/evaluation')}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-xs text-[color:var(--ink)] transition hover:bg-[color:var(--accent)]/10"
+                  >
+                    評価基準
+                  </button>
+                </div>
+              </div>
 
               <button
                 type="button"
@@ -420,7 +453,7 @@ export default function Home() {
                 disabled={isBusy}
                 className="w-full rounded-full border border-[color:var(--accent)] px-5 py-3 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)]/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                面接を終了して採点へ
+                面接を終了して採点へ進む
               </button>
               <button
                 type="button"
@@ -428,7 +461,7 @@ export default function Home() {
                 disabled={isBusy}
                 className="w-full rounded-full border border-black/10 px-5 py-3 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                セッションを破棄してホームへ
+                セッションを破棄してホームへ戻る
               </button>
             </aside>
 
@@ -441,7 +474,7 @@ export default function Home() {
                   <h2 className="mt-2 font-display text-3xl">面接画面</h2>
                 </div>
                 <div className="rounded-full bg-[color:var(--accent)]/10 px-4 py-2 text-xs text-[color:var(--accent)]">
-                  質問数 {Math.ceil(messages.length / 2)}
+                  質問数: {Math.ceil(messages.length / 2)}
                 </div>
               </div>
 
@@ -466,61 +499,19 @@ export default function Home() {
         ) : null}
 
         {phase === 'scoring' && session ? (
-          <section
-            data-testid={GAME_FLOW_TEST_IDS.scoreForm}
-            className="rounded-[2rem] border border-black/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(30,26,22,0.10)]"
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--muted)]">ScoreSubmission</p>
-                <h2 className="mt-2 font-display text-3xl">12項目の採点入力</h2>
-              </div>
-              <p className="max-w-xl text-sm leading-7 text-[color:var(--muted)]">
-                各項目を 1 から 5 で採点してください。採点送信後に `submitted_scores` と結果フィードバックを表示します。
-              </p>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {COMPETENCY_FIELDS.map((field) => (
-                <label
-                  key={field.id}
-                  className="rounded-[1.5rem] border border-black/10 bg-[color:var(--paper)] px-4 py-4 text-sm shadow-inner"
-                >
-                  <span className="block font-medium text-[color:var(--ink)]">{field.label}</span>
-                  <span className="mt-1 block text-xs text-[color:var(--muted)]">{field.id}</span>
-                  <select
-                    value={scores[field.id]}
-                    onChange={(event) => handleScoreChange(field.id, Number(event.target.value))}
-                    className="mt-3 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm"
-                  >
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => void handleSubmitScores()}
-                disabled={isBusy}
-                className="rounded-full bg-[color:var(--accent)] px-6 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isBusy ? '採点送信中...' : '採点を送信する'}
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-full border border-black/10 px-6 py-3 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-white"
-              >
-                セッションを破棄する
-              </button>
-            </div>
-          </section>
+          <div data-testid={GAME_FLOW_TEST_IDS.scoreForm}>
+            <ScoreEditor
+              title="12項目の採点入力"
+              description="面接中に付けたメモと同期された数値を確認し、各項目を 1 から 5 で採点してください。採点送信後に submitted_scores と結果フィードバックを表示します。"
+              scores={scores}
+              onScoreChange={handleScoreChange}
+              primaryActionLabel={isBusy ? '採点を送信しています...' : '採点を送信する'}
+              secondaryActionLabel="セッションを破棄"
+              onPrimaryAction={() => void handleSubmitScores()}
+              onSecondaryAction={handleReset}
+              primaryActionDisabled={isBusy}
+            />
+          </div>
         ) : null}
 
         {phase === 'result' && result ? (

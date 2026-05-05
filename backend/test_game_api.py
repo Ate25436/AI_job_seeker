@@ -31,6 +31,34 @@ class TestGameApi:
         main_module.rag_service = DummyRAGService()
         self.rag_service = main_module.rag_service
 
+    def test_get_game_briefing(self):
+        response = self.client.get("/api/game/briefing")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["candidate_profile"]["full_name"] == "就活 太郎"
+        assert data["company_profile"]["company_name"] == "フロンティアソフト株式会社"
+        entry_sheet_sections = data["candidate_profile"]["entry_sheet_sections"]
+        assert len(entry_sheet_sections) == 3
+        assert [section["title"] for section in entry_sheet_sections] == [
+            "志望動機を教えてください。",
+            "学生時代に力を入れたことを教えてください。",
+            "チームワークを発揮した経験を教えてください。",
+        ]
+        assert "志望する理由" in entry_sheet_sections[0]["summary"]
+        assert "もともと" in entry_sheet_sections[0]["summary"]
+        assert "入社後は" in entry_sheet_sections[0]["summary"]
+        assert "学園祭の出店企画" in entry_sheet_sections[1]["summary"]
+        assert "企画案と担当表" in entry_sheet_sections[1]["summary"]
+        assert "業務でも" in entry_sheet_sections[1]["summary"]
+        assert "進捗共有と役割調整" in entry_sheet_sections[2]["summary"]
+        assert "個別に声をかけていました" in entry_sheet_sections[2]["summary"]
+        assert "業務でも" in entry_sheet_sections[2]["summary"]
+        for section in entry_sheet_sections:
+            assert "1." not in section["summary"]
+            assert 180 <= len(section["summary"]) <= 420
+        assert len(data["evaluation_criteria"]) == len(COMPETENCY_DEFINITIONS)
+
     def test_start_game_session(self):
         response = self.client.post("/api/game/start", json={})
         assert response.status_code == 200
